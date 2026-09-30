@@ -220,8 +220,11 @@ function paintRow(row, { l, kids }, now, mirror) {
   cl.toggle('nowb', isNow);
   if (isNow) row.dataset.now = now.label; else if (row.dataset.now) delete row.dataset.now;
   if (row.ind !== l.ind) { row.ind = l.ind; row.style.setProperty('--i', l.ind); }
-  // The line being edited shows its raw text; everything else is redrawn only when the text changed.
-  if (!cl.contains('ed') && row.text !== l.text) { row.text = l.text; paintText(row.firstChild, l.text); }
+  const hl = l.hl || '';
+  if ((row.dataset.hl ?? '') !== hl) { if (hl) row.dataset.hl = hl; else delete row.dataset.hl; }
+  // The line being edited shows its raw text; everything else is redrawn only when its text or color changed.
+  const key = `${hl}\n${l.text}`;
+  if (!cl.contains('ed') && row.key !== key) { row.key = key; paintText(row.firstChild, l.text, hl); }
   const foldKey = kids ? `${kids}${l.fold ? '+' : '-'}` : '';
   if (row.foldKey !== foldKey) {
     row.foldKey = foldKey;
@@ -234,7 +237,8 @@ function paintRow(row, { l, kids }, now, mirror) {
 // Web links open in a new tab; app links (a note, a shortcut) open their app.
 const link = (href, label) => href ? h('a', { href, target: /^https?:/i.test(href) ? '_blank' : null, rel: 'noopener' }, label) : label;
 
-function paintText(tx, text) {
-  tx.replaceChildren(...segments(text).map(([k, s, label, href]) =>
-    k === 'l' ? link(href, label) : k === 'u' ? link(s, s) : k ? h('span', { className: 's-' + k }, s) : s));
+function paintText(tx, text, hl) {
+  const parts = segments(text).map(([k, s, label, href]) =>
+    k === 'l' ? link(href, label) : k === 'u' ? link(s, s) : k ? h('span', { className: 's-' + k }, s) : s);
+  if (hl && text.trim()) tx.replaceChildren(h('mark', {}, parts)); else tx.replaceChildren(...parts);
 }

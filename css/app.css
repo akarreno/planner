@@ -14,6 +14,7 @@
   --danger: #d6423d;
   --warn: #e09a1c;
   --on-color: #ffffff;
+  --hl-purple: #e6d9ff; --hl-pink: #ffd6e8; --hl-orange: #ffdcae; --hl-mint: #c8f0dc; --hl-blue: #d2e4ff;
   --toast-bg: #1e2128;
   --toast-fg: #f2f3f6;
   --toast-link: #a3b8ff;
@@ -26,14 +27,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1115; --surface: #1a1d23; --fg: #e8eaef; --muted: #979daa; --faint: #5f6572; --rule: #2a2e37;
-    --accent: #8ba6ff; --accent-soft: #1d2645; --now: #ff5f5a; --done: #45c485; --danger: #ff6a63; --warn: #f0b440; --on-color: #0f1115;
+    --accent: #8ba6ff; --accent-soft: #1d2645; --now: #ff5f5a; --done: #45c485; --danger: #ff6a63; --warn: #f0b440; --on-color: #0f1115; --hl-purple: #4b3d7a; --hl-pink: #6e3050; --hl-orange: #6e4816; --hl-mint: #1d5a42; --hl-blue: #24466f;
     --toast-bg: #e8eaef; --toast-fg: #16181d; --toast-link: #2b58d4; --shadow: 0 10px 30px rgb(0 0 0 / .5);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1115; --surface: #1a1d23; --fg: #e8eaef; --muted: #979daa; --faint: #5f6572; --rule: #2a2e37;
-  --accent: #8ba6ff; --accent-soft: #1d2645; --now: #ff5f5a; --done: #45c485; --danger: #ff6a63; --warn: #f0b440; --on-color: #0f1115;
+  --accent: #8ba6ff; --accent-soft: #1d2645; --now: #ff5f5a; --done: #45c485; --danger: #ff6a63; --warn: #f0b440; --on-color: #0f1115; --hl-purple: #4b3d7a; --hl-pink: #6e3050; --hl-orange: #6e4816; --hl-mint: #1d5a42; --hl-blue: #24466f;
   --toast-bg: #e8eaef; --toast-fg: #16181d; --toast-link: #2b58d4; --shadow: 0 10px 30px rgb(0 0 0 / .5);
   color-scheme: dark;
 }
@@ -86,11 +87,11 @@ body.sub { --top: var(--bar); }
 body.editing .fab, body.dragging .fab { display: none; }
 
 /* ---- Days ---- */
-main { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin: 0 auto; padding-bottom: 45vh; }
+main { display: flex; flex-direction: column; gap: 14px; max-width: 680px; margin: 0 auto; padding-bottom: 45vh; }
 .day { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + var(--top, 0px)); }
 .dh {
   position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--top, 0px)); z-index: 3;
-  display: flex; align-items: center; gap: 6px; margin-inline: -8px; padding: 6px 8px 4px;
+  display: flex; align-items: center; gap: 6px; margin-inline: -8px; padding: 8px 8px 4px;
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
@@ -100,7 +101,7 @@ main { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin
 }
 .dt .ic { width: 13px; height: 13px; flex: none; color: var(--faint); stroke-width: 2.6; transform: rotate(90deg); transition: transform .15s; }
 .day.folded .dt .ic { transform: none; }
-.dt h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 650 16px/1.2 var(--round); }
+.dt h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 21px/1.2 var(--round); letter-spacing: -.01em; }
 .chip {
   flex: none; padding: 3px 6px; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent);
@@ -129,22 +130,23 @@ main { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin
 /* ---- Lines ---- */
 .ln {
   position: relative; display: flex; align-items: flex-start; gap: 6px;
-  min-height: 24px; margin-inline: -8px; padding: 3px 8px 3px calc(8px + var(--i, 0) * var(--step));
+  min-height: 22px; margin-inline: -8px; padding: 3px 8px 3px calc(8px + var(--i, 0) * var(--step)); font-size: 16px;
   border-radius: 8px; cursor: text; touch-action: pan-y;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
-.tx { flex: 1; min-width: 0; min-height: 24px; line-height: 24px; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+.tx { flex: 1; min-width: 0; min-height: 22px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
 .ln.ed { background-color: var(--accent-soft); -webkit-user-select: text; user-select: text; }
 .ln.bul::before {
-  content: ""; position: absolute; top: 14px; left: calc(8px + var(--i) * var(--step) - 14px);
+  content: ""; position: absolute; top: 13px; left: calc(8px + var(--i) * var(--step) - 14px);
   width: 7px; height: 1.6px; border-radius: 1px; background: var(--faint);
 }
-.ln.head .tx { font-weight: 620; }
+/* Headers ("Work:") and lines with sub-items read as headings, like Notes' collapsible sections. */
+.ln.head .tx, .ln.par .tx { font-weight: 600; }
 /* A blank line is a paragraph gap, not a full line, until it's tapped. */
 .ln.blank:not(.ed), .ln.blank:not(.ed) .tx { min-height: 8px; line-height: 8px; }
 .ln.done .tx { color: var(--faint); text-decoration: line-through; text-decoration-thickness: 1px; }
 .ln.done .s-t, .ln.done .s-d, .ln.done a { color: inherit; }
-.s-t, .s-d { color: var(--accent); font-weight: 560; font-variant-numeric: tabular-nums; }
+.s-t, .s-d { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
 .s-m { color: var(--faint); }
 .s-q { color: var(--muted); }
 .tx a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; word-break: break-all; }
@@ -157,6 +159,14 @@ main { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin
 .ln.folded .fd { background: var(--rule); color: var(--muted); }
 .ln.folded .fd .ic { transform: none; }
 .ln.mir { cursor: text; }
+
+/* Highlights hug the text like a marker; while editing, the whole line takes the color. */
+.tx mark { padding: 1px 2px; margin: 0 -2px; border-radius: 4px; background: var(--hl); color: inherit; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.ln[data-hl="purple"] { --hl: var(--hl-purple); } .ln[data-hl="pink"] { --hl: var(--hl-pink); } .ln[data-hl="orange"] { --hl: var(--hl-orange); }
+.ln[data-hl="mint"] { --hl: var(--hl-mint); } .ln[data-hl="blue"] { --hl: var(--hl-blue); }
+.ln.ed[data-hl] { background-color: var(--hl); }
+.tx mark .s-t, .tx mark .s-d { color: inherit; }
+.ln.done mark { background: none; }
 
 /* "Now": a red rule above the next timed line, or under the last line of today. */
 .ln.nowb, .ls.nowend { background-image: linear-gradient(var(--now), var(--now)); background-repeat: no-repeat; background-size: 100% 2px; }
@@ -198,7 +208,13 @@ body.dragging { cursor: grabbing; -webkit-user-select: none; user-select: none; 
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
-.kb .ib { width: 44px; color: var(--fg); }
+.kb-row { display: flex; justify-content: center; gap: 2px; }
+.kb .ib { width: 40px; color: var(--fg); }
+.kb .sw-c { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; background: none; cursor: pointer; }
+.kb .sw-c::before { content: ""; width: 24px; height: 24px; border-radius: 50%; background: var(--hl); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .08); }
+.kb .sw-c.on::before { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg); }
+.kb .sw-c[data-hl="purple"] { --hl: var(--hl-purple); } .kb .sw-c[data-hl="pink"] { --hl: var(--hl-pink); } .kb .sw-c[data-hl="orange"] { --hl: var(--hl-orange); }
+.kb .sw-c[data-hl="mint"] { --hl: var(--hl-mint); } .kb .sw-c[data-hl="blue"] { --hl: var(--hl-blue); }
 .kb .ib.on { color: var(--done); }
 
 /* ---- Toast ---- */

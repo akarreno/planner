@@ -29,14 +29,25 @@
 <main id="main"></main>
 <button class="fab" id="menu" data-icon="more" aria-label="Menu"><span class="dot" id="dot" hidden></span></button>
 <div class="kb" id="kb" role="toolbar" aria-label="Line tools" hidden>
-  <button class="ib" data-kb="outdent" data-icon="outdent" aria-label="Outdent"></button>
-  <button class="ib" data-kb="indent" data-icon="indent" aria-label="Indent"></button>
-  <button class="ib" data-kb="done" data-icon="check" aria-label="Mark done"></button>
-  <button class="ib" data-kb="up" data-icon="up" aria-label="Move up"></button>
-  <button class="ib" data-kb="down" data-icon="down" aria-label="Move down"></button>
-  <button class="ib" data-kb="link" data-icon="link" aria-label="Add or edit link"></button>
-  <button class="ib" data-kb="move" data-icon="move" aria-label="Move to another day"></button>
-  <button class="ib" data-kb="close" data-icon="hide" aria-label="Hide keyboard"></button>
+  <div class="kb-row" id="kb-tools">
+    <button class="ib" data-kb="outdent" data-icon="outdent" aria-label="Outdent"></button>
+    <button class="ib" data-kb="indent" data-icon="indent" aria-label="Indent"></button>
+    <button class="ib" data-kb="done" data-icon="check" aria-label="Mark done"></button>
+    <button class="ib" data-kb="mark" data-icon="mark" aria-label="Highlight"></button>
+    <button class="ib" data-kb="link" data-icon="link" aria-label="Add or edit link"></button>
+    <button class="ib" data-kb="up" data-icon="up" aria-label="Move up"></button>
+    <button class="ib" data-kb="down" data-icon="down" aria-label="Move down"></button>
+    <button class="ib" data-kb="move" data-icon="move" aria-label="Move to another day"></button>
+    <button class="ib" data-kb="close" data-icon="hide" aria-label="Hide keyboard"></button>
+  </div>
+  <div class="kb-row" id="kb-colors" hidden>
+    <button class="sw-c" data-hl="purple" aria-label="Purple highlight"></button>
+    <button class="sw-c" data-hl="pink" aria-label="Pink highlight"></button>
+    <button class="sw-c" data-hl="orange" aria-label="Orange highlight"></button>
+    <button class="sw-c" data-hl="mint" aria-label="Mint highlight"></button>
+    <button class="sw-c" data-hl="blue" aria-label="Blue highlight"></button>
+    <button class="ib" data-hl="" data-icon="close" aria-label="No highlight"></button>
+  </div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <dialog class="sheet" id="sheet"></dialog>

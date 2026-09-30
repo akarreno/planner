@@ -19,7 +19,7 @@ No framework and no build step: plain ES modules, plus a trimmed Firebase bundle
 | `js/menus.js` | Sheets: menu, Fill days, Move to, import, copy, sync account |
 | `js/app.js`, `js/main.js` | Startup and tap routing; `main.js` is the hosted entry |
 | `js/config.js` | The Firebase project's web settings (public by design) |
-| `sw.js`, `manifest.webmanifest`, `icons/` | Offline cache and Home Screen app |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Offline cache, automatic updates, and Home Screen app |
 | `firestore.rules` | Each account can read and write only its own planner |
 
 ## Data
@@ -34,5 +34,7 @@ plus `k` (kind), `u` (server time of the last write) and `x` (deleted). Devices 
 - `node test/e2e.mjs`: sync between two browsers against the Firebase emulators (see the file for setup).
 - `npm run artifact`: builds `dist/` for the claude.ai preview (no sync; starts empty like the hosted app).
 - `tools/vendor-firebase.sh <version>`: rebuilds `vendor/firebase.js`.
+- `node tools/icons.mjs`: redraws the icons: `icons/` for the web app, and in `design/icon/` light, dark and tinted
+  versions plus Icon Composer layers for a future native app.
 
 Run locally: `npx http-server -c-1 .` and open http://localhost:8080.

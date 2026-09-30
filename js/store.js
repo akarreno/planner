@@ -4,7 +4,7 @@
 export const LATER = 'later';   // container id of the Later list
 export const state = {
   days: new Map(),    // id → { id, date, fold, arch }
-  lines: new Map(),   // id → { id, c: container id (day, template or LATER), pos, text, ind, done, fold }
+  lines: new Map(),   // id → { id, c: container id (day, template or LATER), pos, text, ind, done, fold, hl?: highlight color }
   tpls: new Map(),    // id → { id, name, pos, fold }
   prefs: { hideDone: true, laterFold: false },
   // Sync bookkeeping: the signed-in account, the newest server time seen, and records changed here but not sent yet.
@@ -168,7 +168,7 @@ function slots(c, i, n, skip) {
 // Inserts rows ({ text, ind, fold? }) at index i of container c and returns the new lines.
 export function insert(c, i, rows) {
   const pos = slots(c, i, rows.length);
-  return rows.map((r, k) => add(state.lines, { id: uid(), c, pos: pos[k], text: r.text, ind: r.ind, done: false, fold: !!r.fold }));
+  return rows.map((r, k) => add(state.lines, { id: uid(), c, pos: pos[k], text: r.text, ind: r.ind, done: false, fold: !!r.fold, ...(r.hl && { hl: r.hl }) }));
 }
 
 // Moves a block to index i of container c (index counted without the block), with its first line at indent ind.

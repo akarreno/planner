@@ -7,7 +7,7 @@ import { moveSheet, toggleDone, linkSheet } from './menus.js';
 import { anchorsIn } from './ui.js';
 
 const L = state.lines;
-const bar = document.getElementById('kb');
+const bar = document.getElementById('kb'), tools = document.getElementById('kb-tools'), colors = document.getElementById('kb-colors');
 // Plain-text editing keeps pasted formatting out; engines without it fall back to regular editing.
 const EDITABLE = (() => { const d = document.createElement('div'); d.contentEditable = 'plaintext-only'; return d.contentEditable === 'plaintext-only' ? 'plaintext-only' : 'true'; })();
 let cur = null;   // { id, row, tx } for the line being edited
@@ -283,7 +283,7 @@ main.addEventListener('focusout', e => {
   if (!tx.classList?.contains('tx')) return;
   tx.contentEditable = 'false';
   tx.parentElement.classList.remove('ed');
-  tx.parentElement.text = null;   // redraw the finished line from the saved text
+  tx.parentElement.key = null;   // redraw the finished line from the saved text
   if (cur?.tx === tx) cur = null;
   queueMicrotask(render);
   requestAnimationFrame(syncBar);
@@ -294,8 +294,11 @@ main.addEventListener('focusout', e => {
 bar.addEventListener('pointerdown', e => e.preventDefault());   // keep focus, and the keyboard, on the line
 bar.addEventListener('mousedown', e => e.preventDefault());
 bar.addEventListener('click', e => {
+  if (!cur) return;
+  const color = e.target.closest('[data-hl]');
+  if (color) return highlight(color.dataset.hl || null);
   const b = e.target.closest('[data-kb]');
-  if (!b || !cur) return;
+  if (!b) return;
   ({
     outdent: () => shift(-1),
     indent: () => shift(1),
@@ -304,13 +307,28 @@ bar.addEventListener('click', e => {
     down: () => moveBy(1),
     move: () => { const l = line(); cur.tx.blur(); moveSheet(l); },
     link: openLink,
+    mark: () => showColors(true),
     close: () => cur.tx.blur(),
   })[b.dataset.kb]();
 });
 
+// The highlight button swaps the tools for a row of colors; picking one (or none) swaps them back.
+function showColors(on) {
+  tools.hidden = on;
+  colors.hidden = !on;
+  if (on) for (const b of colors.querySelectorAll('[data-hl]')) b.classList.toggle('on', (line().hl || '') === b.dataset.hl);
+}
+
+function highlight(color) {
+  const l = line(), [offset] = caret(cur.tx);
+  act(() => update(L, l.id, { hl: color }), l.id, offset);
+  showColors(false);
+}
+
 function syncBar() {
   const on = !!cur && document.activeElement === cur.tx;
   bar.hidden = !on;
+  if (!on) showColors(false);
   document.body.classList.toggle('editing', on);
   if (!on) return;
   placeBar();

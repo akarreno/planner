@@ -26,6 +26,7 @@ const PATHS = {
   down: 'M12 5v14M6 13l6 6 6-6',
   move: 'M4 12h12M12 7l5 5-5 5M20 5v14',
   hide: 'M6 9.5l6 6 6-6',
+  mark: 'M14.5 4.5l5 5L10 19H5v-5zM12 7l5 5M4 21.5h9',
   link: 'M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1',
   close: 'M6 6l12 12M18 6L6 18',
 };
@@ -62,11 +63,12 @@ export const choose = (title, items, ...extra) => sheet(title,
 const toastEl = document.getElementById('toast');
 let toastTimer = 0;
 
-export function toast(message, undo) {
-  toastEl.replaceChildren(h('span', {}, message), undo && h('button', { onclick: () => { toastEl.hidden = true; undo(); } }, 'Undo'));
+// A short message, optionally with one action button (Undo unless labelled otherwise).
+export function toast(message, action, label = 'Undo', ms = 5000) {
+  toastEl.replaceChildren(h('span', {}, message), action && h('button', { onclick: () => { toastEl.hidden = true; action(); } }, label));
   toastEl.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 5000);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, ms);
 }
 
 // ---- Links in pasted rich text ----
