@@ -1,5 +1,5 @@
 // Draws the app icon in every variant from one drawing, with headless Chromium (Playwright).
-//   icons/                 the web app's Home Screen icons (light)
+//   icons/                 the web app's Home Screen icons (a web app gets one icon, so it uses the dark one)
 //   design/icon/*.png      light, dark and tinted 1024 px versions for a future native app
 //   design/icon/*.svg      the icon's layers, for Xcode's Icon Composer (background color is set there)
 // Run: node tools/icons.mjs
@@ -32,8 +32,9 @@ async function png(markup, size, path) {
   writeFileSync(new URL(path, root), await page.screenshot({ type: 'png' }));
 }
 for (const [name, markup] of Object.entries(VARIANTS)) await png(markup, 1024, `design/icon/AppIcon-${name}.png`);
-await png(VARIANTS.light, 512, 'icons/icon-512.png');
-await png(VARIANTS.light, 192, 'icons/icon-192.png');
-await png(VARIANTS.light, 180, 'icons/apple-touch-icon.png');
+const WEB = VARIANTS.dark;
+await png(WEB, 512, 'icons/icon-512.png');
+await png(WEB, 192, 'icons/icon-192.png');
+await png(WEB, 180, 'icons/apple-touch-icon.png');
 await browser.close();
 console.log('icons written');

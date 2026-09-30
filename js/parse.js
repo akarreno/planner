@@ -119,6 +119,34 @@ export function clock(text) { const h = HEAD.exec(text); return h[2] ? minutes(h
 // Date a line starts with, or null: "Nov 6: Ask…" → "2026-11-06".
 export function leadDate(text, base = today()) { const h = HEAD.exec(text); return h[2] ? null : dateAt(text.slice(h[0].length), base)?.iso ?? null; }
 
+// ---- Times after moving a line ----
+
+// Time b on a line below time a, in minutes: an early-morning time (before 06:00) more than 6 hours
+// before a counts as after midnight, like "< 01:00 Sleep" after "19:00 Dinner".
+export const afterMidnight = (a, b) => (a != null && b != null && b < 360 && b < a - 360 ? b + 1440 : b);
+
+export const hhmm = m => `${pad(Math.floor((m % 1440 + 1440) % 1440 / 60))}:${pad((m % 60 + 60) % 60)}`;
+
+// A time for a line that now sits between two timed lines, or null when its own time already fits.
+// prev and next are the start times of the nearest timed lines above and below (null if none).
+// The suggestion is halfway between the neighbours: rounded to 5 minutes when they're 10 or more apart.
+export function fitTime(prev, t, next) {
+  const p = prev, tt = afterMidnight(p, t), n = afterMidnight(p ?? tt, next);
+  if ((p == null || tt >= p) && (n == null || tt <= n)) return null;
+  let s;
+  if (p != null && n != null) { const gap = n - p; s = gap >= 10 ? Math.round((p + gap / 2) / 5) * 5 : Math.floor(p + gap / 2); }
+  else s = p != null ? p + 30 : n - 30;
+  return (s % 1440 + 1440) % 1440;
+}
+
+// The line with its start time set to m. A range keeps its length; markers like ≈ and < stay.
+export function withTime(text, m) {
+  const h = HEAD.exec(text);
+  if (!h[2]) return text;
+  const mark = h[1] ?? '', start = minutes(h[2]), sep = h[0].slice(mark.length + h[2].length, h[0].length - (h[3]?.length ?? 0));
+  return mark + hhmm(m) + sep + (h[3] ? hhmm(minutes(h[3]) + m - start) : '') + text.slice(h[0].length);
+}
+
 // 'blank', 'head' (ends with a colon, like "WR:" or "@ Home:") or ''.
 export function kind(text) { const t = text.trim(); return !t ? 'blank' : t.endsWith(':') ? 'head' : ''; }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify } from '../js/parse.js';
+import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify, fitTime, withTime, hhmm } from '../js/parse.js';
 import { NOTE, TEMPLATE, BASE as base } from './fixture.js';
 
 const join = segs => segs.map(s => s[1]).join('');
@@ -65,6 +65,29 @@ test('leadDate finds dates at the start of a line in several spellings', () => {
   assert.equal(leadDate('— Decide this: link', base), null);
   assert.equal(leadDate('— Union Station 3', base), null);
   assert.equal(leadDate('10:45 Union Station', base), null);
+});
+
+test('fitTime suggests a time between the neighbours only when the moved time is out of order', () => {
+  const m = s => s == null ? null : clock(s);
+  const fit = (p, t, n) => { const r = fitTime(m(p), m(t), m(n)); return r == null ? null : hhmm(r); };
+  assert.equal(fit('13:00', '15:30', '14:00'), '13:30');          // halfway, rounded to 5 minutes
+  assert.equal(fit('13:25', '15:30', '13:30'), '13:27');          // neighbours close together: to the minute
+  assert.equal(fit('12:00', '12:30', '13:00'), null);             // already fits
+  assert.equal(fit('13:00', '13:00', '13:00'), null);
+  assert.equal(fit('19:00', '09:00', '01:00'), '22:00');          // "< 01:00 Sleep" after dinner is after midnight
+  assert.equal(fit('19:00', '00:30', '01:00'), null);
+  assert.equal(fit('22:30', '07:00', null), '23:00');             // a morning time can't follow 22:30 on the same day
+  assert.equal(fit(null, '15:30', '09:00'), '08:30');             // dropped above the first timed line
+  assert.equal(fit('20:00', '00:30', null), null);                // after midnight
+  assert.equal(fit('08:00', '07:00', null), '08:30');             // below the last timed line
+});
+
+test('withTime changes a line\'s time and keeps markers and range lengths', () => {
+  assert.equal(withTime('≈ 15:30 Coffee (?)', 810), '≈ 13:30 Coffee (?)');
+  assert.equal(withTime('< 22:30 Sleep', 1380), '< 23:00 Sleep');
+  assert.equal(withTime('13:30 - 15:00 Gym', 600), '10:00 - 11:30 Gym');
+  assert.equal(withTime('18:30 to 20:00 Run club', 1410), '23:30 to 01:00 Run club');
+  assert.equal(withTime('— No time', 600), '— No time');
 });
 
 test('kind spots headers and blank lines', () => {

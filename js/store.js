@@ -59,15 +59,49 @@ export function changed() {
   queueMicrotask(() => { queued = false; listeners.forEach(fn => fn()); });
 }
 
+// ---- Undo ----
+
+// The last changes made on this device, newest last, each a list of [map, id, record before].
+// Changes from other devices are never recorded, and an undo is not itself recorded.
+const history = [];
+const HISTORY = 20;
+let typing = null;   // the typing burst still growing: { id, step, at }
+
 // Runs fn as one undoable step and returns the function that undoes it.
 export function tx(fn) {
   if (journal) { fn(); return () => {}; }
-  const steps = journal = [];
+  const step = journal = [];
   try { fn(); } finally { journal = null; }
-  return () => tx(() => {
-    for (let k = steps.length; k--;) { const [map, id, before] = steps[k]; before ? set(map, before) : remove(map, id); }
-  });
+  if (!step.length) return () => {};
+  history.push(step);
+  if (history.length > HISTORY) history.shift();
+  typing = null;
+  return () => revert(step);
 }
+
+// Typing in one line counts as one step until a pause of 2 seconds, like undo in Notes.
+export function typed(id, patch) {
+  const now = Date.now();
+  if (typing?.id === id && now - typing.at < 2000 && history.at(-1) === typing.step) {
+    typing.at = now;
+    return update(state.lines, id, patch);
+  }
+  tx(() => update(state.lines, id, patch));
+  typing = { id, step: history.at(-1), at: now };
+}
+
+function revert(step) {
+  const i = history.indexOf(step);
+  if (i < 0) return false;   // already undone
+  history.splice(i, 1);
+  typing = null;
+  for (let k = step.length; k--;) { const [map, id, before] = step[k]; before ? set(map, before) : remove(map, id); }
+  return true;
+}
+
+// Undoes the most recent change; false when there is nothing left to undo.
+export const undo = () => history.length > 0 && revert(history.at(-1));
+export const canUndo = () => history.length > 0;
 
 // ---- Sync ----
 
@@ -92,6 +126,16 @@ export function replaceAll(changes) {
   try { for (const map of Object.values(KINDS)) for (const id of [...map.keys()]) remove(map, id); } finally { remote = false; }
   state.sync.dirty.clear();
   applyRemote(changes);
+}
+
+// Swaps the planner for a saved copy ({ days, lines, tpls }) as one undoable step; returns the undo.
+export function restoreCopy({ days, lines, tpls }) {
+  return tx(() => {
+    for (const map of Object.values(KINDS)) for (const id of [...map.keys()]) remove(map, id);
+    for (const d of days) set(state.days, d);
+    for (const t of tpls) set(state.tpls, t);
+    for (const l of lines) set(state.lines, l);
+  });
 }
 
 // Marks every record as changed, to send all of it (a device's first sync with an empty account).

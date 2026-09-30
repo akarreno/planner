@@ -1,10 +1,10 @@
 // Editing in place: tap a line to type into it, keys that behave like Notes,
 // and the toolbar that rides above the keyboard.
-import { state, tx, update, remove, insert, block, moveBlock, indexOf, linesOf } from './store.js';
+import { state, tx, typed, undo, update, remove, insert, block, moveBlock, indexOf, linesOf } from './store.js';
 import { parseLines, segments, isUrl, linkText, linkAt, linkify } from './parse.js';
 import { main, render } from './view.js';
 import { moveSheet, toggleDone, linkSheet } from './menus.js';
-import { anchorsIn } from './ui.js';
+import { anchorsIn, toast } from './ui.js';
 
 const L = state.lines;
 const bar = document.getElementById('kb'), tools = document.getElementById('kb-tools'), colors = document.getElementById('kb-colors');
@@ -50,6 +50,16 @@ function rawOffset(text, shown) {
     r += s.length;
   }
   return text.length;
+}
+
+// Undoes the last change. While editing, the line shows its restored text, or editing ends if it's gone.
+export function undoLast() {
+  const id = cur?.id, mirror = inMirror();
+  if (!undo()) return toast('Nothing to undo.');
+  render();
+  const l = id && L.get(id);
+  if (l) focusLine(id, l.text.length, mirror);
+  else if (cur) cur.tx.blur();
 }
 
 // Adds a line at the end of a container (or reuses a trailing blank one) and starts editing it.
@@ -232,6 +242,7 @@ main.addEventListener('keydown', e => {
   else if ((k === 'ArrowUp' || k === 'ArrowDown') && !e.shiftKey && !mod && atEdge(k === 'ArrowUp')) done = step(k === 'ArrowUp' ? -1 : 1);
   else if (k === 'Escape') done = cur.tx.blur();
   else if (mod && k.toLowerCase() === 'k') done = openLink();
+  else if (mod && k.toLowerCase() === 'z') done = e.shiftKey || undoLast();   // redo isn't supported
   else return;
   if (done !== false) e.preventDefault();
 });
@@ -241,6 +252,8 @@ main.addEventListener('beforeinput', e => {
   if (!cur || e.target !== cur.tx) return;
   const [start, end] = caret(cur.tx);
   if (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak') { e.preventDefault(); enter(start, end); }
+  else if (e.inputType === 'historyUndo') { e.preventDefault(); undoLast(); }   // iPhone shake or three-finger swipe
+  else if (e.inputType === 'historyRedo') e.preventDefault();
   else if (e.inputType === 'deleteContentBackward' && start === 0 && end === 0 && backspace() !== false) e.preventDefault();
 });
 
@@ -251,10 +264,10 @@ main.addEventListener('input', e => {
   if (text.includes('\n')) { cur.tx.textContent = text = text.replace(/\n+/g, ' '); setCaret(cur.tx, text.length); }
   if (!l.ind && /^[-*•] /.test(text) && caret(cur.tx)[0] === 2) {   // typing "- " starts a sub-item, like Notes
     cur.tx.textContent = text = text.slice(2);
-    update(L, l.id, { text, ind: 1 });
+    typed(l.id, { text, ind: 1 });
     return setCaret(cur.tx, 0);
   }
-  update(L, l.id, { text });
+  typed(l.id, { text });
 });
 
 // Pasting an address over selected text links it. Links copied from Notes come along as [label](address).
@@ -307,6 +320,7 @@ bar.addEventListener('click', e => {
     down: () => moveBy(1),
     move: () => { const l = line(); cur.tx.blur(); moveSheet(l); },
     link: openLink,
+    undo: undoLast,
     mark: () => showColors(true),
     close: () => cur.tx.blur(),
   })[b.dataset.kb]();

@@ -1,8 +1,10 @@
 // Starts the app: loads saved data, draws, routes taps, and connects sync when it's set up.
 import * as store from './store.js';
 import { startSync } from './sync.js';
+import { backupIfDue } from './backup.js';
+import { today } from './parse.js';
 import { main, ui, render, go, scrollToNow } from './view.js';
-import { editAt, appendLine } from './edit.js';
+import { editAt, appendLine, undoLast } from './edit.js';
 import { consumeClick } from './gestures.js';
 import { mainMenu, dayMenu, laterMenu, tplMenu, archive, restore, newTemplate, importSheet, importTemplatesSheet, setAccount } from './menus.js';
 import { fillIcons } from './ui.js';
@@ -30,7 +32,17 @@ async function connectAccount(config, emulator) {
     stop?.();
     stop = null;
     setAccount({ on: true, fb, user });
-    if (user) stop = startSync(store, fb.backend(user.uid), user.uid, status => setAccount({ on: true, fb, user, status }));
+    if (!user) return;
+    const server = fb.backend(user.uid);
+    let backupError = null;
+    // Once this device has the account's planner (after its first sync), it saves the day's backup.
+    stop = startSync(store, server, user.uid, status => {
+      setAccount({ on: true, fb, user, status, backupError });
+      if (status.first) return;
+      backupIfDue(state, server.backups, user.uid, today()).then(
+        () => { backupError = null; },
+        e => { backupError = e; setAccount({ on: true, fb, user, status, backupError }); });
+    });
   });
 }
 
@@ -70,6 +82,14 @@ main.addEventListener('click', e => {
   if (act === 'append') return appendLine(c);
   const row = e.target.closest('.ln');
   if (row && !row.classList.contains('ed')) editAt(row, e.clientX, e.clientY);
+});
+
+// ⌘Z outside a line (inside one, edit.js handles it).
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
+  if (e.target.closest?.('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+  e.preventDefault();
+  undoLast();
 });
 
 // Keep the "now" line and the Today label current. Save before the app goes to the background,

@@ -2,10 +2,11 @@
 // long-press (or drag with a mouse) to move a line and its sub-items anywhere, including other days.
 // Touch uses touch events rather than pointer events: iOS cancels pointer events when a long press
 // turns into a move, but lets a touchmove listener take over the move from scrolling.
-import { state, tx, block, linesOf, moveBlock } from './store.js';
+import { state, tx, update, block, linesOf, moveBlock } from './store.js';
+import { clock, fitTime, withTime, hhmm } from './parse.js';
 import { main } from './view.js';
 import { toggleDone, removeWithUndo } from './menus.js';
-import { h } from './ui.js';
+import { h, toast } from './ui.js';
 
 const LONG_PRESS = 350, SLOP = 10, SWIPE = 72, EDGE_TOP = 90, EDGE_BOTTOM = 70;
 let g = null;          // the gesture in progress
@@ -183,4 +184,23 @@ function endDrag(s, ok) {
   const prev = list[i - 1], next = list[i];
   const lo = prev && next && next.ind > 0 && prev.ind >= next.ind ? next.ind : 0, hi = prev ? prev.ind + 1 : 0;
   tx(() => moveBlock(s.blk, c, i, Math.min(Math.max(s.blk[0].ind, lo), hi)));
+  offerTime(s.blk[0].id, s.ids);
+}
+
+// A dropped line whose time no longer fits between the nearest times above and below it gets a
+// suggested time halfway between them. Nothing changes unless the button is tapped.
+function offerTime(id, moved) {
+  const l = state.lines.get(id), t = clock(l.text);
+  if (t == null) return;
+  const list = linesOf(l.c), i = list.findIndex(x => x.id === id);
+  const near = dir => {
+    for (let j = i + dir; j >= 0 && j < list.length; j += dir) {
+      const m = moved.has(list[j].id) ? null : clock(list[j].text);
+      if (m != null) return m;
+    }
+    return null;
+  };
+  const s = fitTime(near(-1), t, near(1));
+  if (s == null) return;
+  toast(`Change ${hhmm(t)} to ${hhmm(s)}?`, () => tx(() => update(state.lines, id, { text: withTime(state.lines.get(id).text, s) })), 'Change', 8000);
 }

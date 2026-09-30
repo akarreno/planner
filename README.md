@@ -10,8 +10,9 @@ No framework and no build step: plain ES modules, plus a trimmed Firebase bundle
 | File | What it does |
 |---|---|
 | `js/parse.js` | Pure text logic: reading a line, pasted text, a whole note, templates; exporting back to text |
-| `js/store.js` | Days, lines and templates in memory; undoable changes; saved to `localStorage` |
+| `js/store.js` | Days, lines and templates in memory; undo history of the last 20 changes; saved to `localStorage` |
 | `js/sync.js` | Two-way sync: sends changed records in batches, applies other devices' changes live |
+| `js/backup.js` | Daily compressed backup of the whole planner, last 30 days kept; restore is one undoable step |
 | `js/firebase.js` | Firebase sign-in and Firestore storage, in the shape `sync.js` expects |
 | `js/view.js` | Draws the screen, touching only the rows that changed |
 | `js/edit.js` | Tap-to-edit, Notes-like keys (Return, Backspace, Tab), paste, toolbar above the keyboard |
@@ -20,13 +21,14 @@ No framework and no build step: plain ES modules, plus a trimmed Firebase bundle
 | `js/app.js`, `js/main.js` | Startup and tap routing; `main.js` is the hosted entry |
 | `js/config.js` | The Firebase project's web settings (public by design) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline cache, automatic updates, and Home Screen app |
-| `firestore.rules` | Each account can read and write only its own planner |
+| `firestore.rules` | Each account can read and write only its own planner and backups |
 
 ## Data
 
 Firestore path `users/{uid}/items/{record id}`: each day, line and template is one document with its fields
 plus `k` (kind), `u` (server time of the last write) and `x` (deleted). Devices listen for documents with
-`u` newer than the last one they saw, so an app launch only reads what changed.
+`u` newer than the last one they saw, so an app launch only reads what changed. Backups are gzipped JSON at
+`users/{uid}/backups/{date}`, listed in `users/{uid}/backups/_index`.
 
 ## Commands
 

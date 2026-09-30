@@ -97,6 +97,19 @@ const t1 = Date.now();
 const gone = await until(async () => (await phone.locator('.ln', { hasText: 'Pay Rent' }).count()) === 0);
 log('delete mac → phone:', gone, `${Date.now() - t1} ms`);
 
+// Backups: the phone saved one after its first sync. Restoring it on the phone undoes the edit and the
+// deletion above, on both devices; Undo right after brings them back.
+const index = await fetch(`${FS}/v1/projects/demo-planner/databases/(default)/documents/users/${me.localId}/backups/_index`, { headers: { Authorization: 'Bearer owner' } }).then(r => r.json());
+log('backup saved for:', index.fields?.dates?.arrayValue?.values?.map(v => v.stringValue));
+await phone.locator('#menu').click();
+await phone.locator('dialog .act', { hasText: 'Backups' }).click();
+await phone.locator('dialog .act').first().click();
+await phone.locator('dialog .primary', { hasText: 'Restore' }).click();
+const restored = await until(async () => (await mac.locator('.ln', { hasText: 'Pay Rent' }).count()) > 0 && (await mac.locator('.ln', { hasText: 'and floss' }).count()) === 0);
+log('restore reached mac:', restored);
+await phone.locator('#toast button', { hasText: 'Undo' }).click();
+log('undo of restore reached mac:', await until(async () => (await mac.locator('.ln', { hasText: 'and floss' }).count()) > 0));
+
 // Offline on the phone: edits wait, then go out when back online.
 await phone.context().setOffline(true);
 const later = phone.locator('section.day[data-kind=later] .ls > .ln', { hasText: 'Clean up phone photos' });

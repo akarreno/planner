@@ -1,10 +1,12 @@
 // Sheets and undoable actions: menus, Fill days, Move to, import, copy, and the sync account.
 import {
-  state, LATER, tx, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
+  state, LATER, tx, canUndo, restoreCopy, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
   fillDays, replacePlanner, replaceTemplates, activeDays, archivedDays, templates, dayOn, ensureDay,
 } from './store.js';
 import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText, safeUrl } from './parse.js';
 import { go, scrollToDate } from './view.js';
+import { undoLast } from './edit.js';
+import { unpack } from './backup.js';
 import { h, sheet, choose, closeSheet, toast, pasteWithLinks } from './ui.js';
 
 const undoable = (message, fn) => toast(message, tx(fn));
@@ -133,11 +135,12 @@ export const tplMenu = tp => choose(tp.name, [
 // ---- Sync account ----
 
 // on: sync is set up here; fb: the Firebase connection, once loaded; user: { uid, email } or null;
-// status: what sync last reported ({ pending, sending, first, offline, error }).
+// status: what sync last reported ({ pending, sending, first, offline, error }); backupError: the last
+// failed daily backup, if any.
 let account = { on: false, fb: null, user: null, status: null };
 
 export function setAccount(next) {
-  account = { status: null, ...next };
+  account = { status: null, backupError: null, ...next };
   const s = account.status, dot = document.getElementById('dot');
   dot.hidden = !s || !(s.error || (s.offline && s.pending));
   dot.classList.toggle('bad', !!s?.error);
@@ -194,14 +197,49 @@ function accountSheet() {
   ], h('p', { className: 'note' }, `Signed in as ${user.email}. ${syncHint()}.`), s?.error ? h('p', { className: 'note err' }, s.error) : null);
 }
 
+// ---- Backups ----
+
+const backupProblem = e => e?.code === 'permission-denied'
+  ? 'Backups need the updated Firestore rules. In Firebase → Firestore → Rules, paste the new rules and tap Publish.'
+  : /offline|unavailable|network/i.test(e?.code ?? e?.message ?? '') ? 'Backups need a connection. Try again when you’re online.' : e?.message ?? String(e);
+
+async function backupsSheet() {
+  const api = account.fb.backend(account.user.uid).backups;
+  sheet('Backups', h('p', { className: 'note' }, 'Loading…'));
+  let dates;
+  try { dates = await api.list(); } catch (e) { return sheet('Backups', h('p', { className: 'note err' }, backupProblem(e))); }
+  const about = h('p', { className: 'note' }, 'A copy of your planner is saved each day you use the app while signed in, and the last 30 days are kept. Tap a day to go back to it.');
+  const failed = account.backupError && h('p', { className: 'note err' }, `Today’s backup didn’t save: ${backupProblem(account.backupError)}`);
+  if (!dates.length) return sheet('Backups', h('p', { className: 'note' }, 'No backups yet. The first one is saved the next time the app syncs.'), failed);
+  choose('Backups', [...dates].reverse().map(d => ({ label: dayTitle(d), hint: d === today() ? 'Today' : '', run: () => restoreSheet(api, d) })), about, failed);
+}
+
+function restoreSheet(api, date) {
+  const ok = h('button', { className: 'primary', onclick: async () => {
+    ok.disabled = true;
+    try {
+      const copy = await unpack(await api.load(date));
+      closeSheet();
+      toast(`Planner restored to ${dayTitle(date)}`, restoreCopy(copy), 'Undo', 10_000);
+    } catch (e) {
+      closeSheet();
+      toast(`Couldn’t restore: ${backupProblem(e)}`);
+    }
+  } }, 'Restore');
+  sheet(`Restore ${dayTitle(date)}?`,
+    h('p', { className: 'note' }, 'Your days, Later list, templates and archive go back to how they were in that backup, on all your devices. You can undo right after.'), ok);
+}
+
 // ---- App ----
 
 export const mainMenu = () => choose('Planner', [
+  canUndo() && { label: 'Undo last change', run: undoLast },
   { label: 'Fill days…', run: fillSheet },
   { label: 'Templates', hint: String(templates().length), run: () => go('tpl') },
   { label: 'Archive', hint: String(archivedDays().length), run: () => go('arch') },
   { label: 'Show done lines', checked: !state.prefs.hideDone, run: () => setPref('hideDone', !state.prefs.hideDone) },
   account.on && { label: 'Sync', hint: syncHint(), run: () => (!account.fb ? toast('Still connecting. Try again in a moment.') : account.user ? accountSheet() : signInSheet()) },
+  account.user && { label: 'Backups', hint: account.backupError ? 'Problem' : '', run: backupsSheet },
   { label: 'Import planner note…', run: importSheet },
   { label: 'Import weekly template…', run: importTemplatesSheet },
   { label: 'Copy everything as text', run: () => copy(allText()) },

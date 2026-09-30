@@ -1,7 +1,7 @@
 // Draws the current screen from state. Sections and rows are keyed by id and only touched when
 // something about them changed, so the line being edited keeps its focus and caret.
 import { state, LATER, linesOf, activeDays, archivedDays, templates, dayOn } from './store.js';
-import { segments, kind, clock, leadDate, headTitle, today, addDays, nowMinutes, clockLabel, NUMBERED } from './parse.js';
+import { segments, kind, clock, leadDate, headTitle, today, addDays, nowMinutes, clockLabel, afterMidnight, NUMBERED } from './parse.js';
 import { h, icon } from './ui.js';
 
 export const main = document.getElementById('main');
@@ -90,15 +90,14 @@ function outline(list) {
 
 const countOf = c => linesOf(c).filter(l => l.text.trim()).length;
 
-// The "now" line sits just above the next timed line. Times that jump back by 6+ hours
+// The "now" line sits just above the next timed line. Early-morning times after late ones
 // (like "< 01:00 Sleep" after dinner) count as after midnight.
 function nowMark(entries) {
   const now = nowMinutes();
   let prev = null;
   for (const { l } of entries) {
-    let m = clock(l.text);
+    const m = afterMidnight(prev, clock(l.text));
     if (m == null) continue;
-    if (prev != null && m < prev - 360) m += 1440;
     prev = m;
     if (m > now) return { at: l.id, label: clockLabel() };
   }
