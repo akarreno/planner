@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import { startSync } from './sync.js';
 import { main, ui, render, go, scrollToNow } from './view.js';
-import { edit, offsetAt, appendLine } from './edit.js';
+import { editAt, appendLine } from './edit.js';
 import { consumeClick } from './gestures.js';
 import { mainMenu, dayMenu, laterMenu, tplMenu, archive, restore, newTemplate, importSheet, importTemplatesSheet, setAccount } from './menus.js';
 import { fillIcons } from './ui.js';
@@ -17,19 +17,19 @@ export function start({ seed, config, emulator } = {}) {
   store.onChange(render);
   render();
   scrollToNow();
-  if (config) connectAccount(config, emulator);
+  if (config) { setAccount({ on: true }); connectAccount(config, emulator); }
 }
 
 async function connectAccount(config, emulator) {
   const { connect } = await import('./firebase.js');   // the Firebase bundle loads after the planner is on screen
   const fb = connect(config, emulator);
   let stop = null;
-  setAccount({ fb, user: null });
+  setAccount({ on: true, fb, user: null });
   fb.onUser(user => {
     stop?.();
     stop = null;
-    setAccount({ fb, user });
-    if (user) stop = startSync(store, fb.backend(user.uid), user.uid, status => setAccount({ fb, user, status }));
+    setAccount({ on: true, fb, user });
+    if (user) stop = startSync(store, fb.backend(user.uid), user.uid, status => setAccount({ on: true, fb, user, status }));
   });
 }
 
@@ -68,7 +68,7 @@ main.addEventListener('click', e => {
   if (sec.classList.contains('ro') || e.target.closest('a')) return;
   if (act === 'append') return appendLine(c);
   const row = e.target.closest('.ln');
-  if (row && !row.classList.contains('ed')) edit(row, offsetAt(row.firstChild, e.clientX, e.clientY));
+  if (row && !row.classList.contains('ed')) editAt(row, e.clientX, e.clientY);
 });
 
 // Keep the "now" line and the Today label current. Save before the app goes to the background,

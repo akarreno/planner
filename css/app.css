@@ -198,7 +198,7 @@ body.dragging { cursor: grabbing; -webkit-user-select: none; user-select: none; 
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
-.kb .ib { width: 46px; color: var(--fg); }
+.kb .ib { width: 44px; color: var(--fg); }
 .kb .ib.on { color: var(--done); }
 
 /* ---- Toast ---- */

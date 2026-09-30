@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle } from '../js/parse.js';
+import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify } from '../js/parse.js';
 import { NOTE, TEMPLATE, BASE as base } from './fixture.js';
 
 const join = segs => segs.map(s => s[1]).join('');
@@ -14,6 +14,35 @@ test('segments split the shorthand and join back to the exact line', () => {
   assert.deepEqual(segments('18:30 to 20:00 Run club', base)[0], ['t', '18:30 to 20:00']);
   assert.deepEqual(segments('— Nov 10: Review', base).slice(0, 2), [['m', '— '], ['d', 'Nov 10']]);
   assert.deepEqual(segments('w/ Link: https://example.com', base).at(-1), ['u', 'https://example.com']);
+});
+
+test('links: [label](address) shows the label and keeps only safe addresses', () => {
+  const line = '— [Food diary](https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0) daily';
+  const segs = segments(line, base);
+  assert.equal(join(segs), line);
+  assert.deepEqual(segs[1], ['l', '[Food diary](https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0)', 'Food diary', 'https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0']);
+  assert.equal(segments('[x](javascript:alert(1))', base).some(s => s[3]), false);
+  assert.equal(safeUrl('applenotes:note/ABC?ownerIdentifier=1'), 'applenotes:note/ABC?ownerIdentifier=1');
+  assert.equal(safeUrl('www.example.com'), 'https://www.example.com');
+  assert.equal(safeUrl('data:text/html,hi'), null);
+  assert.equal(isUrl('https://example.com/a'), true);
+  assert.equal(isUrl('applenotes:note/X'), true);
+  assert.equal(isUrl('10:30 Gym'), false);
+  assert.equal(isUrl('Note: bring it'), false);
+  assert.equal(linkText('A [b]', 'https://e.com/x (1)'), '[A b](https://e.com/x%20%281%29)');
+  assert.deepEqual(linkAt('— [A](https://e.com) b', 5), { start: 2, end: 20, label: 'A', url: 'https://e.com' });
+  assert.equal(linkAt('— [A](https://e.com) b', 21), null);
+});
+
+test('linkify puts links copied from Notes back into the plain text', () => {
+  const text = '— Food diary\n— Trip packing\n— Food diary again\n— https://example.com';
+  const anchors = [
+    { label: 'Food diary', href: 'https://docs.google.com/x' },
+    { label: 'Trip packing', href: 'applenotes:note/ABC' },
+    { label: 'https://example.com', href: 'https://example.com' },
+    { label: 'bad', href: 'javascript:void(0)' },
+  ];
+  assert.equal(linkify(text, anchors), '— [Food diary](https://docs.google.com/x)\n— [Trip packing](applenotes:note/ABC)\n— Food diary again\n— https://example.com');
 });
 
 test('clock reads start times, ignoring markers', () => {

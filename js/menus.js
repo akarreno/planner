@@ -3,9 +3,9 @@ import {
   state, LATER, tx, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
   fillDays, replacePlanner, replaceTemplates, activeDays, archivedDays, templates, dayOn, ensureDay,
 } from './store.js';
-import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText } from './parse.js';
+import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText, safeUrl } from './parse.js';
 import { go, scrollToDate } from './view.js';
-import { h, sheet, choose, closeSheet, toast } from './ui.js';
+import { h, sheet, choose, closeSheet, toast, pasteWithLinks } from './ui.js';
 
 const undoable = (message, fn) => toast(message, tx(fn));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -32,6 +32,25 @@ export function moveSheet(line) {
     ...dates.filter(d => d !== here).map(d => ({ label: d === t ? 'Today' : d === addDays(t, 1) ? 'Tomorrow' : shortDay(d), hint: d === t || d === addDays(t, 1) ? shortDay(d) : '', run: () => to(d, dayTitle(d)) })),
     line.c !== LATER && { label: 'Later', run: () => to(LATER, 'Later') },
   ], h('label', { className: 'field' }, 'Another date', other));
+}
+
+// save(label, url) gets url null for "Remove link".
+export function linkSheet({ label, url }, save) {
+  const text = h('input', { id: 'link-text', value: label, placeholder: 'Text to show', autocomplete: 'off' });
+  const addr = h('input', { id: 'link-url', value: url, inputMode: 'url', placeholder: 'https://… or an app link', autocapitalize: 'off', autocomplete: 'off' });
+  const msg = h('p', { className: 'note err', hidden: true }, 'That isn’t an address. Paste a web address like https://… or an app link.');
+  const submit = e => {
+    e.preventDefault();
+    const u = safeUrl(addr.value);
+    if (!u) { msg.hidden = false; return; }
+    closeSheet();
+    save(text.value.trim(), u);
+  };
+  sheet(url ? 'Edit link' : 'Add link', h('form', { className: 'stack', onsubmit: submit },
+    h('label', { className: 'field' }, 'Text', text), h('label', { className: 'field' }, 'Address', addr), msg,
+    h('button', { className: 'primary', type: 'submit' }, 'Save'),
+    url && h('button', { className: 'act danger', type: 'button', onclick: () => { closeSheet(); save(text.value.trim() || url, null); } }, 'Remove link')));
+  (label ? addr : text).focus();
 }
 
 // ---- Days ----
@@ -113,9 +132,9 @@ export const tplMenu = tp => choose(tp.name, [
 
 // ---- Sync account ----
 
-// fb: the Firebase connection (null when sync isn't set up); user: { uid, email } or null;
+// on: sync is set up here; fb: the Firebase connection, once loaded; user: { uid, email } or null;
 // status: what sync last reported ({ pending, sending, first, offline, error }).
-let account = { fb: null, user: null, status: null };
+let account = { on: false, fb: null, user: null, status: null };
 
 export function setAccount(next) {
   account = { status: null, ...next };
@@ -125,7 +144,8 @@ export function setAccount(next) {
 }
 
 function syncHint() {
-  const { user, status: s } = account;
+  const { fb, user, status: s } = account;
+  if (!fb) return 'Connecting…';
   if (!user) return 'Sign in';
   if (!s || s.first) return 'Connecting…';
   if (s.error) return 'Problem';
@@ -171,11 +191,11 @@ export const mainMenu = () => choose('Planner', [
   { label: 'Templates', hint: String(templates().length), run: () => go('tpl') },
   { label: 'Archive', hint: String(archivedDays().length), run: () => go('arch') },
   { label: 'Show done lines', checked: !state.prefs.hideDone, run: () => setPref('hideDone', !state.prefs.hideDone) },
-  account.fb && { label: 'Sync', hint: syncHint(), run: () => (account.user ? accountSheet() : signInSheet()) },
+  account.on && { label: 'Sync', hint: syncHint(), run: () => (!account.fb ? toast('Still connecting. Try again in a moment.') : account.user ? accountSheet() : signInSheet()) },
   { label: 'Import planner note…', run: importSheet },
   { label: 'Import weekly template…', run: importTemplatesSheet },
   { label: 'Copy everything as text', run: () => copy(allText()) },
-], account.fb ? null : h('p', { className: 'note' }, 'Saved on this device only. Sync isn’t set up here.'));
+], account.on ? null : h('p', { className: 'note' }, 'Saved on this device only. Sync isn’t set up here.'));
 
 const allText = () => exportText([
   ...activeDays().map(d => ({ title: dayTitle(d.date), lines: linesOf(d.id) })),
@@ -183,7 +203,7 @@ const allText = () => exportText([
 ]);
 
 export function importSheet() {
-  const text = h('textarea', { id: 'import-text', placeholder: 'Paste the whole note here' });
+  const text = h('textarea', { id: 'import-text', placeholder: 'Paste the whole note here', onpaste: pasteWithLinks });
   const replace = h('button', { className: 'primary', disabled: true }, 'Replace planner');
   const parse = () => importNote(text.value, { base: today() });
   text.oninput = () => {
@@ -198,7 +218,7 @@ export function importSheet() {
 }
 
 export function importTemplatesSheet() {
-  const text = h('textarea', { id: 'import-tpl-text', placeholder: 'Paste the weekly template note here' });
+  const text = h('textarea', { id: 'import-tpl-text', placeholder: 'Paste the weekly template note here', onpaste: pasteWithLinks });
   const replace = h('button', { className: 'primary', disabled: true }, 'Replace templates');
   text.oninput = () => {
     const n = importTemplates(text.value).length;

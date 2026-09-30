@@ -231,7 +231,10 @@ function paintRow(row, { l, kids }, now, mirror) {
   }
 }
 
+// Web links open in a new tab; app links (a note, a shortcut) open their app.
+const link = (href, label) => href ? h('a', { href, target: /^https?:/i.test(href) ? '_blank' : null, rel: 'noopener' }, label) : label;
+
 function paintText(tx, text) {
-  tx.replaceChildren(...segments(text).map(([k, s]) =>
-    k === 'u' ? h('a', { href: s, target: '_blank', rel: 'noopener' }, s) : k ? h('span', { className: 's-' + k }, s) : s));
+  tx.replaceChildren(...segments(text).map(([k, s, label, href]) =>
+    k === 'l' ? link(href, label) : k === 'u' ? link(s, s) : k ? h('span', { className: 's-' + k }, s) : s));
 }

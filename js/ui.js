@@ -1,4 +1,5 @@
-// Small DOM helpers: element builder, icons, bottom sheet and toast.
+// Small DOM helpers: element builder, icons, bottom sheet, toast, and links from pasted rich text.
+import { linkify } from './parse.js';
 
 export function h(tag, props, ...kids) {
   const el = document.createElement(tag);
@@ -25,6 +26,7 @@ const PATHS = {
   down: 'M12 5v14M6 13l6 6 6-6',
   move: 'M4 12h12M12 7l5 5-5 5M20 5v14',
   hide: 'M6 9.5l6 6 6-6',
+  link: 'M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1',
   close: 'M6 6l12 12M18 6L6 18',
 };
 
@@ -65,4 +67,23 @@ export function toast(message, undo) {
   toastEl.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toastEl.hidden = true; }, 5000);
+}
+
+// ---- Links in pasted rich text ----
+
+// The links in copied HTML (Notes puts both HTML and plain text on the clipboard): [{ label, href }].
+export function anchorsIn(html) {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return [...doc.querySelectorAll('a[href]')].map(a => ({ label: a.textContent, href: a.getAttribute('href') }));
+}
+
+// For import boxes: pastes the plain text with Notes links written back in as [label](address).
+export function pasteWithLinks(e) {
+  const anchors = anchorsIn(e.clipboardData.getData('text/html'));
+  if (!anchors.length) return;
+  e.preventDefault();
+  const box = e.target;
+  box.setRangeText(linkify(e.clipboardData.getData('text/plain'), anchors), box.selectionStart, box.selectionEnd, 'end');
+  box.dispatchEvent(new Event('input'));
 }

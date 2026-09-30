@@ -1,9 +1,10 @@
 // Editing in place: tap a line to type into it, keys that behave like Notes,
 // and the toolbar that rides above the keyboard.
 import { state, tx, update, remove, insert, block, moveBlock, indexOf, linesOf } from './store.js';
-import { parseLines } from './parse.js';
+import { parseLines, segments, isUrl, linkText, linkAt, linkify } from './parse.js';
 import { main, render } from './view.js';
-import { moveSheet, toggleDone } from './menus.js';
+import { moveSheet, toggleDone, linkSheet } from './menus.js';
+import { anchorsIn } from './ui.js';
 
 const L = state.lines;
 const bar = document.getElementById('kb');
@@ -31,6 +32,24 @@ export function focusLine(id, offset, mirror = false) {
   const rows = [...main.querySelectorAll(`.ln[data-id="${id}"]`)];
   const row = rows.find(r => r.classList.contains('mir') === mirror) ?? rows[0];
   if (row) edit(row, offset);
+}
+
+// Starts editing where the finger or pointer landed. A drawn link shows only its label, so the
+// position in the drawing is turned into the position in the line's text.
+export function editAt(row, x, y) {
+  const l = L.get(row.dataset.id);
+  if (l) edit(row, rawOffset(l.text, offsetAt(row.firstChild, x, y)));
+}
+
+function rawOffset(text, shown) {
+  let d = 0, r = 0;
+  for (const [k, s, label] of segments(text)) {
+    const len = k === 'l' ? label.length : s.length;
+    if (shown <= d + len) return r + (k === 'l' ? 1 : 0) + shown - d;   // inside a link label: just after "["
+    d += len;
+    r += s.length;
+  }
+  return text.length;
 }
 
 // Adds a line at the end of a container (or reuses a trailing blank one) and starts editing it.
@@ -174,7 +193,29 @@ function step(dir) {
   const target = rows[rows.indexOf(cur.row) + dir];
   if (!target) return false;
   const x = caretRect()?.left ?? 0, box = target.firstChild.getBoundingClientRect();
-  edit(target, offsetAt(target.firstChild, x, dir < 0 ? box.bottom - 4 : box.top + 4));
+  editAt(target, x, dir < 0 ? box.bottom - 4 : box.top + 4);
+}
+
+// ---- Links ----
+
+// Links the selected text to an address, as pasting a link over selected text does in Notes.
+function setLink(start, end, url) {
+  const l = line(), text = cur.tx.textContent;
+  const next = text.slice(0, start) + linkText(text.slice(start, end), url) + text.slice(end);
+  act(() => update(L, l.id, { text: next }), l.id, next.length - (text.length - end));
+}
+
+// Add or edit a link (⌘K, or the toolbar): on the link under the caret, or on the selected text.
+function openLink() {
+  const l = line(), text = cur.tx.textContent;
+  let [start, end] = caret(cur.tx);
+  const found = linkAt(text, start);
+  if (found) ({ start, end } = found);
+  cur.tx.blur();
+  linkSheet({ label: found ? found.label : text.slice(start, end), url: found?.url ?? '' }, (label, url) => {
+    const t = L.get(l.id).text, piece = !url ? label : label ? linkText(label, url) : url;
+    tx(() => update(L, l.id, { text: t.slice(0, start) + piece + t.slice(end) }));
+  });
 }
 
 // ---- Events ----
@@ -190,6 +231,7 @@ main.addEventListener('keydown', e => {
   else if ((k === 'ArrowUp' || k === 'ArrowDown') && e.altKey) done = moveBy(k === 'ArrowUp' ? -1 : 1);
   else if ((k === 'ArrowUp' || k === 'ArrowDown') && !e.shiftKey && !mod && atEdge(k === 'ArrowUp')) done = step(k === 'ArrowUp' ? -1 : 1);
   else if (k === 'Escape') done = cur.tx.blur();
+  else if (mod && k.toLowerCase() === 'k') done = openLink();
   else return;
   if (done !== false) e.preventDefault();
 });
@@ -215,13 +257,16 @@ main.addEventListener('input', e => {
   update(L, l.id, { text });
 });
 
+// Pasting an address over selected text links it. Links copied from Notes come along as [label](address).
 // Pasting several lines splits them into lines, keeping their indents relative to this one.
 main.addEventListener('paste', e => {
   if (!cur || !cur.tx.contains(e.target)) return;
   e.preventDefault();
-  const raw = e.clipboardData.getData('text/plain').replace(/\s+$/, '');
+  const plain = e.clipboardData.getData('text/plain').replace(/\s+$/, ''), [start, end] = caret(cur.tx);
+  if (start < end && isUrl(plain)) return setLink(start, end, plain.trim());
+  const raw = linkify(plain, anchorsIn(e.clipboardData.getData('text/html')));
   if (!raw.includes('\n')) return document.execCommand('insertText', false, raw);
-  const rows = parseLines(raw), l = line(), text = cur.tx.textContent, [start, end] = caret(cur.tx), tail = text.slice(end), base = rows[0].ind;
+  const rows = parseLines(raw), l = line(), text = cur.tx.textContent, tail = text.slice(end), base = rows[0].ind;
   let id;
   act(() => {
     update(L, l.id, { text: text.slice(0, start) + rows[0].text });
@@ -258,6 +303,7 @@ bar.addEventListener('click', e => {
     up: () => moveBy(-1),
     down: () => moveBy(1),
     move: () => { const l = line(); cur.tx.blur(); moveSheet(l); },
+    link: openLink,
     close: () => cur.tx.blur(),
   })[b.dataset.kb]();
 });

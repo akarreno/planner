@@ -46,12 +46,14 @@ function dateAt(s, base) {
 
 // Optional marker ("—", "≈", "<", ">"), then an optional time or range: "≈ 15:30", "11:30 - 12:30", "18:30 to 20:00".
 const HEAD = /^([—–]\s*|[≈~<>]\s*)?(?:(\d{1,2}:\d{2})(?:\s*(?:-|–|to)\s*(\d{1,2}:\d{2}))?(?=\s|$))?/;
-const INLINE = /\(\?\)|https?:\/\/\S+/g;
+// A link written as [label](address), "(?)", or a bare web address.
+const INLINE = /\[([^[\]\n]+)\]\(([^()\s]+)\)|\(\?\)|https?:\/\/\S+/g;
 export const NUMBERED = /^\d+[.)]\s/;
 const minutes = s => { const i = s.indexOf(':'); return s.slice(0, i) * 60 + +s.slice(i + 1); };
 
 // The parts of a line for display, as [kind, text] pairs that join back to the exact line.
-// Kinds: 'm' marker, 't' time, 'd' date, 'q' "(?)", 'u' link, '' plain text.
+// Kinds: 'm' marker, 't' time, 'd' date, 'q' "(?)", 'u' bare web address, '' plain text,
+// and 'l' for [label](address), which also carries the label and a safe address: ['l', text, label, href].
 export function segments(text, base = today()) {
   const out = [], h = HEAD.exec(text);
   let i = 0;
@@ -62,11 +64,53 @@ export function segments(text, base = today()) {
   let j = 0;
   for (const m of rest.matchAll(INLINE)) {
     if (m.index > j) out.push(['', rest.slice(j, m.index)]);
-    out.push([m[0] === '(?)' ? 'q' : 'u', m[0]]);
+    out.push(m[1] ? ['l', m[0], m[1], safeUrl(m[2])] : [m[0] === '(?)' ? 'q' : 'u', m[0]]);
     j = m.index + m[0].length;
   }
   if (j < rest.length) out.push(['', rest.slice(j)]);
   return out;
+}
+
+// ---- Links ----
+
+// An address that is fine to open: web addresses and app links (applenotes:, shortcuts:, mailto: …),
+// never script or data addresses. "www.example.com" gets https:// in front. Anything else gives null.
+export function safeUrl(u) {
+  u = u.trim();
+  if (/^(javascript|data|vbscript|file|blob):/i.test(u)) return null;
+  if (/^[a-z][a-z0-9+.-]*:\S+$/i.test(u)) return u;
+  if (/^www\.\S+$/i.test(u)) return 'https://' + u;
+  return null;
+}
+
+// Does pasted text look like an address, so that pasting it over selected text should link that text?
+export const isUrl = s => /^(?:https?:\/\/|www\.|[a-z][a-z0-9+.-]*:\/\/|(?:mailto|tel|sms|facetime|applenotes|mobilenotes|shortcuts):)\S+$/i.test(s.trim()) && !!safeUrl(s);
+
+// The line text for a link: [label](address), with characters that would end the address early encoded.
+const ESCAPE = { '(': '%28', ')': '%29' };
+export const linkText = (label, url) => `[${label.replace(/[[\]]/g, '')}](${url.trim().replace(/[()\s]/g, c => ESCAPE[c] ?? '%20')})`;
+
+// The link at a position in a line's text, if any: { start, end, label, url }.
+export function linkAt(text, pos) {
+  for (const m of text.matchAll(/\[([^[\]\n]+)\]\(([^()\s]+)\)/g)) {
+    if (pos >= m.index && pos <= m.index + m[0].length) return { start: m.index, end: m.index + m[0].length, label: m[1], url: m[2] };
+  }
+  return null;
+}
+
+// Puts links copied from Notes back into its plain text: each anchor's text, in document order, becomes
+// [text](address). Anchors whose text is the address itself are left alone, since bare addresses already work.
+export function linkify(text, anchors) {
+  let out = '', i = 0;
+  for (const { label, href } of anchors) {
+    const t = label.trim();
+    if (!t || t === href.trim() || /[[\]\n]/.test(t) || !safeUrl(href)) continue;
+    const j = text.indexOf(t, i);
+    if (j < 0) continue;
+    out += text.slice(i, j) + linkText(t, href);
+    i = j + t.length;
+  }
+  return out + text.slice(i);
 }
 
 // Start time of a line in minutes, or null: "≈ 15:30 Coffee" → 930.

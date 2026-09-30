@@ -32,6 +32,7 @@ async function device(name, viewport) {
   return page;
 }
 async function signIn(page) {
+  await until(async () => (await hint(page)) === 'Sign in');   // the sync code loads after the planner
   await page.locator('#menu').click();
   await page.locator('dialog .act', { hasText: 'Sync' }).click();
   await page.fill('#sign-email', 'me@example.com');
