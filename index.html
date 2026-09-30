@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Weekly Planner</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planner">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+<header class="bar" id="bar" hidden>
+  <div class="bar-in">
+    <button class="ib" id="back" data-icon="back" aria-label="Back to planner"></button>
+    <h1 id="title"></h1>
+  </div>
+</header>
+<div class="search" id="search" hidden>
+  <input id="q" type="search" placeholder="Search archived days" autocomplete="off" aria-label="Search archived days">
+</div>
+<main id="main"></main>
+<button class="fab" id="menu" data-icon="more" aria-label="Menu"><span class="dot" id="dot" hidden></span></button>
+<div class="kb" id="kb" role="toolbar" aria-label="Line tools" hidden>
+  <button class="ib" data-kb="outdent" data-icon="outdent" aria-label="Outdent"></button>
+  <button class="ib" data-kb="indent" data-icon="indent" aria-label="Indent"></button>
+  <button class="ib" data-kb="done" data-icon="check" aria-label="Mark done"></button>
+  <button class="ib" data-kb="up" data-icon="up" aria-label="Move up"></button>
+  <button class="ib" data-kb="down" data-icon="down" aria-label="Move down"></button>
+  <button class="ib" data-kb="move" data-icon="move" aria-label="Move to another day"></button>
+  <button class="ib" data-kb="close" data-icon="hide" aria-label="Hide keyboard"></button>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog class="sheet" id="sheet"></dialog>
+</body>
+</html>

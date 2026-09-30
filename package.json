@@ -1,0 +1,9 @@
+{
+  "name": "planner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "artifact": "node tools/artifact.mjs"
+  }
+}
