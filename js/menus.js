@@ -156,7 +156,8 @@ function syncHint() {
 function signInSheet() {
   const email = h('input', { id: 'sign-email', type: 'email', autocomplete: 'username', placeholder: 'Email', autocapitalize: 'off' });
   const password = h('input', { id: 'sign-password', type: 'password', autocomplete: 'current-password', placeholder: 'Password' });
-  const msg = h('p', { className: 'note err', hidden: true });
+  const msg = h('p', { className: 'note', hidden: true });
+  const say = (text, bad) => { msg.textContent = text; msg.classList.toggle('err', bad); msg.hidden = false; };
   const submit = h('button', { className: 'primary', type: 'submit' }, 'Sign in');
   const form = h('form', { className: 'stack', onsubmit: async e => {
     e.preventDefault();
@@ -167,13 +168,22 @@ function signInSheet() {
       closeSheet();
       toast('Signed in. Syncing…');
     } catch (err) {
-      msg.textContent = /invalid|wrong|not-found|credential/.test(err.code ?? '') ? 'That email and password don’t match the account in Firebase.'
-        : /network/.test(err.code ?? '') ? 'No connection. Try again when you’re online.' : err.message;
-      msg.hidden = false;
+      say(/invalid|wrong|not-found|credential/.test(err.code ?? '') ? 'That email and password don’t match an account.'
+        : /network/.test(err.code ?? '') ? 'No connection. Try again when you’re online.' : err.message, true);
       submit.disabled = false;
     }
-  } }, h('label', { className: 'field' }, 'Email', email), h('label', { className: 'field' }, 'Password', password), msg, submit);
-  sheet('Sign in to sync', h('p', { className: 'note' }, 'Use the email and password you added in Firebase → Authentication. Sign in on the device that has your planner first; other devices then load it.'), form);
+  } }, h('label', { className: 'field' }, 'Email', email), h('label', { className: 'field' }, 'Password', password), msg, submit,
+  // New accounts start without a password the person knows: this email lets them choose one.
+  h('button', { className: 'act', type: 'button', onclick: async () => {
+    if (!email.value.trim()) return say('Type your email above first.', true);
+    try {
+      await account.fb.resetPassword(email.value.trim());
+      say('If that email has an account, a link to set your password is on its way. Check spam too.', false);
+    } catch (err) {
+      say(/network/.test(err.code ?? '') ? 'No connection. Try again when you’re online.' : /invalid-email/.test(err.code ?? '') ? 'That email address isn’t valid.' : err.message, true);
+    }
+  } }, 'Set or reset password'));
+  sheet('Sign in to sync', h('p', { className: 'note' }, 'Sign in on the device that has your planner first; other devices then load it.'), form);
   email.focus();
 }
 

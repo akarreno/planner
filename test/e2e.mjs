@@ -115,6 +115,26 @@ log('offline edit reached mac after reconnect:', back, `${Date.now() - t2} ms`);
 await mac.reload();
 await mac.waitForSelector('.ln');
 log('mac after reload, signed in:', await until(async () => (await hint(mac)) === 'Up to date'));
+// A friend: the owner creates their account with a throwaway password; they set their own through the
+// reset email, sign in, and get an empty planner of their own.
+await signUp('friend@example.com');
+const friend = await device('friend');
+await until(async () => (await hint(friend)) === 'Sign in');
+await friend.locator('#menu').click();
+await friend.locator('dialog .act', { hasText: 'Sync' }).click();
+await friend.fill('#sign-email', 'friend@example.com');
+await friend.locator('dialog .act', { hasText: 'Set or reset password' }).click();
+await friend.locator('dialog p.note', { hasText: 'on its way' }).waitFor();
+const { oobCodes } = await fetch(`${AUTH}/emulator/v1/projects/demo-planner/oobCodes`).then(r => r.json());
+const code = oobCodes.find(c => c.email === 'friend@example.com' && c.requestType === 'PASSWORD_RESET')?.oobCode;
+log('reset email sent:', !!code);
+await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:resetPassword?key=demo`, {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ oobCode: code, newPassword: 'friends-own-pw' }) });
+await friend.fill('#sign-password', 'friends-own-pw');
+await friend.locator('dialog .primary').click();
+log('friend signed in with own password:', await until(async () => (await hint(friend)) === 'Up to date'));
+log('friend sees none of the owner’s planner:', (await friend.locator('section.day').count()) === 0 && (await friend.locator('.welcome').isVisible()));
+
 log('errors', errors.filter(e => !/net::ERR_INTERNET_DISCONNECTED|Failed to load resource|WebChannelConnection|Could not reach Cloud Firestore/.test(e)));
 await browser.close();
 

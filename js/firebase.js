@@ -4,7 +4,7 @@
 // hear about it through the same "changed since" query.
 import {
   initializeApp, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, onAuthStateChanged,
-  signInWithEmailAndPassword, signOut, connectAuthEmulator, initializeFirestore, collection, doc, query, where,
+  signInWithEmailAndPassword, sendPasswordResetEmail, signOut, connectAuthEmulator, initializeFirestore, collection, doc, query, where,
   onSnapshot, writeBatch, serverTimestamp, Timestamp, connectFirestoreEmulator,
 } from '../vendor/firebase.js';
 
@@ -19,6 +19,7 @@ export function connect(config, emulator) {
   return {
     onUser: fn => onAuthStateChanged(auth, u => fn(u && { uid: u.uid, email: u.email })),
     signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
+    resetPassword: email => sendPasswordResetEmail(auth, email),
     signOut: () => signOut(auth),
     backend: uid => backend(db, uid),
   };
