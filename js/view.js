@@ -91,7 +91,7 @@ function outline(list) {
 const countOf = c => linesOf(c).filter(l => l.text.trim()).length;
 
 // The "now" line sits just above the next timed line. Times that jump back by 6+ hours
-// (like "< 01:00 Dormir" after dinner) count as after midnight.
+// (like "< 01:00 Sleep" after dinner) count as after midnight.
 function nowMark(entries) {
   const now = nowMinutes();
   let prev = null;

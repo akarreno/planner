@@ -10,9 +10,10 @@ import { fillIcons } from './ui.js';
 const { state, update, setPref } = store;
 const $ = id => document.getElementById(id);
 
-// seed: first-run content ({ note, template, base, first }); config: Firebase web app settings, or null.
-export function start({ seed, config, emulator } = {}) {
-  if (!store.load() && seed) store.seed(seed);
+// config: Firebase web app settings, or null to keep sync off. The planner starts empty until
+// the person imports their own note or signs in.
+export function start({ config, emulator } = {}) {
+  store.load();
   fillIcons(document);
   store.onChange(render);
   render();

@@ -1,6 +1,6 @@
 // Builds dist/ for the claude.ai Artifact preview. The viewer supplies <html>, <head> and <body> itself,
 // and allows no service worker or Firebase connection, so the preview keeps the page's title, stylesheet
-// and body, and starts the app without sync, with first-run content from private/seed.js (not in git).
+// and body, and starts the app without sync. Like the hosted app, it starts empty.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
@@ -15,7 +15,6 @@ writeFileSync(new URL('dist/index.html', root), `${title}
 ${body}
 `);
 writeFileSync(new URL('dist/entry.js', root), `import { start } from './js/app.js';
-import { NOTE, TEMPLATE, SEED_DATE } from './seed.js';
-start({ seed: { note: NOTE, template: TEMPLATE, base: SEED_DATE, first: SEED_DATE } });
+start();
 `);
 console.log('dist/index.html and dist/entry.js written');

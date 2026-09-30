@@ -32,7 +32,7 @@ plus `k` (kind), `u` (server time of the last write) and `x` (deleted). Devices 
 
 - `npm test`: parser and sync tests (Node 22+).
 - `node test/e2e.mjs`: sync between two browsers against the Firebase emulators (see the file for setup).
-- `npm run artifact`: builds `dist/` for the claude.ai preview, seeded from `private/seed.js` (not in git).
+- `npm run artifact`: builds `dist/` for the claude.ai preview (no sync; starts empty like the hosted app).
 - `tools/vendor-firebase.sh <version>`: rebuilds `vendor/firebase.js`.
 
 Run locally: `npx http-server -c-1 .` and open http://localhost:8080.

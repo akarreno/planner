@@ -1,6 +1,5 @@
 // Planner data: days, lines and templates, kept in memory and saved on this device.
 // Every change goes through set/remove, so it can be undone, redrawn and synced record by record.
-import { importNote, importTemplates } from './parse.js';
 
 export const LATER = 'later';   // container id of the Later list
 export const state = {
@@ -203,12 +202,5 @@ export function replaceTemplates(list) {
   list.forEach((t, k) => {
     const tpl = add(state.tpls, { id: uid(), name: t.name, pos: k, fold: true });
     insert(tpl.id, 0, t.lines);
-  });
-}
-
-export function seed({ note, template, base, first }) {
-  tx(() => {
-    replaceTemplates(importTemplates(template));
-    replacePlanner(importNote(note, { base, first }));
   });
 }
