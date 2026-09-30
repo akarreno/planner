@@ -51,8 +51,29 @@ main.addEventListener('pointerdown', e => {
   const row = e.pointerType === 'mouse' && !e.button && rowAt(e.target);
   if (row) begin(row, e.clientX, e.clientY, false);
 });
-addEventListener('pointermove', e => { if (g && !g.touch) move(e.clientX, e.clientY); });
-addEventListener('pointerup', () => { if (g && !g.touch) finish(true); });
+addEventListener('pointermove', e => { if (g && !g.touch && !g.wheel) move(e.clientX, e.clientY); });
+addEventListener('pointerup', () => { if (g && !g.touch && !g.wheel) finish(true); });
+
+// Trackpad: a sideways two-finger swipe over a line works like a touch swipe, as in Mail on the Mac.
+// macOS reports it as sideways scrolling; with natural scrolling the numbers are reversed, which Safari
+// says through webkitDirectionInvertedFromDevice (other browsers assume the macOS default).
+// The swipe ends when the scrolling stops; the drift that follows a swipe is swallowed.
+let wheelEnd = 0, drift = 0;
+main.addEventListener('wheel', e => {
+  const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY), now = performance.now();
+  if (!g?.wheel) {
+    if (!sideways || g) return;
+    if (now < drift) { drift = now + 200; return e.preventDefault(); }
+    const row = rowAt(e.target);
+    if (!row) return;
+    g = { row, x0: 0, y0: 0, x: 0, y: 0, mode: null, touch: false, wheel: true, dx: 0 };
+    startSwipe();
+  }
+  e.preventDefault();   // no page scroll, and no Back/Forward navigation
+  swipeTo(g.dx - e.deltaX * (e.webkitDirectionInvertedFromDevice === false ? -1 : 1));
+  clearTimeout(wheelEnd);
+  wheelEnd = setTimeout(() => { drift = performance.now() + 200; finish(true); }, 200);
+}, { passive: false });
 
 // No text selection or callout menu on lines that aren't being edited, so a long press stays ours.
 main.addEventListener('contextmenu', e => { if (g?.mode || rowAt(e.target)) e.preventDefault(); });
