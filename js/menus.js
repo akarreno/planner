@@ -1,7 +1,7 @@
 // Sheets and undoable actions: menus, Fill days, Move to, import, copy, and the sync account.
 import {
   state, LATER, tx, canUndo, restoreCopy, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
-  fillDays, replacePlanner, replaceTemplates, activeDays, archivedDays, templates, dayOn, ensureDay,
+  fillDays, replacePlanner, addToPlanner, importTemplateList, activeDays, archivedDays, templates, dayOn, ensureDay,
 } from './store.js';
 import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText, safeUrl } from './parse.js';
 import { go, scrollToDate } from './view.js';
@@ -250,33 +250,36 @@ const allText = () => exportText([
   { title: 'Later:', lines: linesOf(LATER) },
 ]);
 
+// Import adds to the planner by default; replacing everything is the second, red button.
 export function importSheet() {
-  const text = h('textarea', { id: 'import-text', placeholder: 'Paste the whole note here', onpaste: pasteWithLinks });
-  const replace = h('button', { className: 'primary', disabled: true }, 'Replace planner');
+  const text = h('textarea', { id: 'import-text', placeholder: 'Paste the note here', onpaste: pasteWithLinks });
+  const addBtn = h('button', { className: 'primary', disabled: true }, 'Add to planner');
+  const replaceBtn = h('button', { className: 'act danger', disabled: true }, 'Replace the whole planner');
   const parse = () => importNote(text.value, { base: today() });
   text.oninput = () => {
-    const { days, later } = parse();
-    replace.disabled = !days.length && !later.length;
-    replace.textContent = `Replace planner with ${plural(days.length, 'day')}${later.length ? ' and Later' : ''}`;
+    const { days, later } = parse(), n = days.length || later.length;
+    addBtn.disabled = replaceBtn.disabled = !n;
+    addBtn.textContent = n ? `Add ${[days.length && plural(days.length, 'day'), later.length && 'Later lines'].filter(Boolean).join(' and ')}` : 'Add to planner';
   };
-  replace.onclick = () => { const parsed = parse(); closeSheet(); undoable('Planner replaced', () => replacePlanner(parsed)); };
+  addBtn.onclick = () => { const parsed = parse(); closeSheet(); undoable('Added to the planner', () => addToPlanner(parsed)); };
+  replaceBtn.onclick = () => { const parsed = parse(); closeSheet(); undoable('Planner replaced', () => replacePlanner(parsed)); };
   sheet('Import planner note',
-    h('p', { className: 'note' }, 'A line like “Thursday October 1” starts a day. Lines before the first day go to today, and everything after “Later:” goes to Later. Archived days are kept.'),
-    text, replace);
+    h('p', { className: 'note' }, 'A line like “Thursday October 1” starts a day; lines before the first day go to today, and everything after “Later:” goes to Later. Adding puts the lines at the end of each day, creating days that don’t exist yet.'),
+    text, addBtn, replaceBtn);
 }
 
 export function importTemplatesSheet() {
   const text = h('textarea', { id: 'import-tpl-text', placeholder: 'Paste the weekly template note here', onpaste: pasteWithLinks });
-  const replace = h('button', { className: 'primary', disabled: true }, 'Replace templates');
+  const importBtn = h('button', { className: 'primary', disabled: true }, 'Import templates');
   text.oninput = () => {
     const n = importTemplates(text.value).length;
-    replace.disabled = !n;
-    replace.textContent = n ? `Replace templates with ${plural(n, 'template')}` : 'Replace templates';
+    importBtn.disabled = !n;
+    importBtn.textContent = n ? `Import ${plural(n, 'template')}` : 'Import templates';
   };
-  replace.onclick = () => { const list = importTemplates(text.value); closeSheet(); undoable(`Imported ${plural(list.length, 'template')}`, () => replaceTemplates(list)); };
+  importBtn.onclick = () => { const list = importTemplates(text.value); closeSheet(); undoable(`Imported ${plural(list.length, 'template')}`, () => importTemplateList(list)); };
   sheet('Import weekly template',
-    h('p', { className: 'note' }, 'A line with just a weekday name, like “Monday”, starts a template. Fill days picks the template with the same name as each day.'),
-    text, replace);
+    h('p', { className: 'note' }, 'A line with just a weekday name, like “Monday”, starts a template. A template with the same name is replaced; your other templates stay. Fill days picks the template named like each day.'),
+    text, importBtn);
 }
 
 // Clipboard writes must start inside the tap that asked for them.

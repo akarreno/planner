@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { startSync } from './sync.js';
 import { backupIfDue } from './backup.js';
 import { today } from './parse.js';
-import { main, ui, render, go, scrollToNow } from './view.js';
+import { main, ui, render, go, scrollToNow, scrollToDate } from './view.js';
 import { editAt, appendLine, undoLast } from './edit.js';
 import { consumeClick } from './gestures.js';
 import { mainMenu, dayMenu, laterMenu, tplMenu, archive, restore, newTemplate, importSheet, importTemplatesSheet, setAccount } from './menus.js';
@@ -47,8 +47,19 @@ async function connectAccount(config, emulator) {
 }
 
 $('menu').onclick = mainMenu;
+$('fold').onclick = foldAll;
 $('back').onclick = () => go('plan');
 $('q').oninput = e => { ui.query = e.target.value; render(); };
+
+// Collapses every day (and Later) on the screen, or expands them all, as one undoable step.
+function foldAll() {
+  const fold = $('fold').dataset.mode === 'collapse';
+  const [map, recs] = ui.screen === 'tpl' ? [state.tpls, store.templates()] : [state.days, ui.screen === 'plan' ? store.activeDays() : store.archivedDays()];
+  store.tx(() => { for (const r of recs) if (r.fold !== fold) update(map, r.id, { fold }); });
+  if (ui.screen !== 'plan') return;
+  setPref('laterFold', fold);
+  requestAnimationFrame(() => (fold ? scrollToDate(today()) : scrollToNow()));
+}
 
 function toggleSection(kind, c) {
   if (kind === 'later') setPref('laterFold', !state.prefs.laterFold);

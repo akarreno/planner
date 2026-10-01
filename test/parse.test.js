@@ -1,27 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify, fitTime, withTime, hhmm } from '../js/parse.js';
+import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify, fitTime, withTime, hhmm, toggleStyle, stylesAt } from '../js/parse.js';
 import { NOTE, TEMPLATE, BASE as base } from './fixture.js';
 
-const join = segs => segs.map(s => s[1]).join('');
+const join = segs => segs.map(x => x.s).join('');
+const pairs = segs => segs.map(x => [x.k, x.s]);
 
 test('segments split the shorthand and join back to the exact line', () => {
   for (const line of ['≈ 15:30 Coffee (?)', '11:30 - 12:30 Meal Prep + Wash Dishes', '18:30 to 20:00 Run club',
     '< 22:30 Sleep', '— Shower + Get dressed', '> Dec 17: Dentist', 'w/ Link: https://example.com', '', '—']) {
     assert.equal(join(segments(line, base)), line);
   }
-  assert.deepEqual(segments('≈ 15:30 Coffee (?)', base), [['m', '≈ '], ['t', '15:30'], ['', ' Coffee '], ['q', '(?)']]);
-  assert.deepEqual(segments('18:30 to 20:00 Run club', base)[0], ['t', '18:30 to 20:00']);
-  assert.deepEqual(segments('— Nov 10: Review', base).slice(0, 2), [['m', '— '], ['d', 'Nov 10']]);
-  assert.deepEqual(segments('w/ Link: https://example.com', base).at(-1), ['u', 'https://example.com']);
+  assert.deepEqual(pairs(segments('≈ 15:30 Coffee (?)', base)), [['m', '≈ '], ['t', '15:30'], ['', ' Coffee '], ['q', '(?)']]);
+  assert.deepEqual(pairs(segments('18:30 to 20:00 Run club', base))[0], ['t', '18:30 to 20:00']);
+  assert.deepEqual(pairs(segments('— Nov 10: Review', base)).slice(0, 2), [['m', '— '], ['d', 'Nov 10']]);
+  assert.deepEqual(pairs(segments('w/ Link: https://example.com', base)).at(-1), ['u', 'https://example.com']);
 });
 
 test('links: [label](address) shows the label and keeps only safe addresses', () => {
   const line = '— [Food diary](https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0) daily';
   const segs = segments(line, base);
   assert.equal(join(segs), line);
-  assert.deepEqual(segs[1], ['l', '[Food diary](https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0)', 'Food diary', 'https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0']);
-  assert.equal(segments('[x](javascript:alert(1))', base).some(s => s[3]), false);
+  assert.deepEqual(segs[1], { k: 'l', s: '[Food diary](https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0)', label: 'Food diary', href: 'https://docs.google.com/spreadsheets/d/abc/edit?gid=0#gid=0' });
+  assert.equal(segments('[x](javascript:alert(1))', base).some(x => x.href), false);
   assert.equal(safeUrl('applenotes:note/ABC?ownerIdentifier=1'), 'applenotes:note/ABC?ownerIdentifier=1');
   assert.equal(safeUrl('www.example.com'), 'https://www.example.com');
   assert.equal(safeUrl('data:text/html,hi'), null);
@@ -43,6 +44,41 @@ test('linkify puts links copied from Notes back into the plain text', () => {
     { label: 'bad', href: 'javascript:void(0)' },
   ];
   assert.equal(linkify(text, anchors), '— [Food diary](https://docs.google.com/x)\n— [Trip packing](applenotes:note/ABC)\n— Food diary again\n— https://example.com');
+});
+
+test('styles: bold, italic, underline and strikethrough, nested, with unpaired markers left as typed', () => {
+  const styled = t => segments(t, base).filter(x => x.k !== 'f').map(x => [x.f ?? '', x.label ?? x.s]);
+  for (const line of ['19:00 **Dinner** with *Ana*', '— ***both*** ~~gone~~', '5 * 3 a // b snake__case', '**open']) assert.equal(join(segments(line, base)), line);
+  assert.deepEqual(styled('19:00 **Dinner** with *Ana* and __Marc__'), [['', '19:00'], ['', ' '], ['b', 'Dinner'], ['', ' with '], ['i', 'Ana'], ['', ' and '], ['u', 'Marc']]);
+  assert.deepEqual(styled('— ***both*** ~~gone~~'), [['', '— '], ['bi', 'both'], ['', ' '], ['s', 'gone']]);
+  assert.deepEqual(styled('— 5 * 3 a // b snake__case **open'), [['', '— '], ['', '5 * 3 a // b snake__case **open']]);
+  assert.deepEqual(styled('**[Food diary](https://x.com)** daily'), [['b', 'Food diary'], ['', ' daily']]);
+  assert.equal(clock('19:00 **Dinner**'), 1140);
+  assert.deepEqual(stylesAt('— **Call** Ana', 6), { f: 'b', hl: undefined });
+  assert.deepEqual(stylesAt('— **Call** Ana', 12), { f: '', hl: undefined });
+});
+
+test('highlights: selected words in one of five colors', () => {
+  const styled = t => segments(t, base).filter(x => x.k !== 'f').map(x => [x.hl ?? '', x.f ?? '', x.s]);
+  assert.deepEqual(styled('18:30 =={pink}Run club== now'), [['', '', '18:30'], ['', '', ' '], ['pink', '', 'Run club'], ['', '', ' now']]);
+  assert.deepEqual(styled('— =={mint}**Go**== and ==plain=='), [['', '', '— '], ['mint', 'b', 'Go'], ['', '', ' and '], ['purple', '', 'plain']]);
+  assert.deepEqual(styled('— a == b'), [['', '', '— '], ['', '', 'a == b']]);
+  assert.deepEqual(toggleStyle('18:30 Run club', 0, 0, 'h', 'pink'), { text: '18:30 =={pink}Run club==', start: 14, end: 22 });
+  assert.equal(toggleStyle('18:30 =={pink}Run club==', 16, 16, 'h', 'blue').text, '18:30 =={blue}Run club==');   // another color recolors
+  assert.equal(toggleStyle('18:30 =={pink}Run club==', 16, 16, 'h', 'pink').text, '18:30 Run club');            // the same color removes
+  assert.equal(toggleStyle('— Call Ana now', 7, 10, 'h', 'orange').text, '— Call =={orange}Ana== now');
+  assert.deepEqual(stylesAt('— =={mint}Go== x', 11), { f: '', hl: 'mint' });
+});
+
+test('toggleStyle styles the selection, or the whole line after its time, and turns styles off again', () => {
+  assert.deepEqual(toggleStyle('19:00 Dinner', 0, 0, 'b'), { text: '19:00 **Dinner**', start: 8, end: 14 });
+  assert.deepEqual(toggleStyle('19:00 **Dinner**', 10, 10, 'b'), { text: '19:00 Dinner', start: 6, end: 12 });
+  assert.deepEqual(toggleStyle('— Call Ana now', 7, 10, 'u'), { text: '— Call __Ana__ now', start: 9, end: 12 });
+  assert.deepEqual(toggleStyle('— Call Ana now', 6, 11, 'i'), { text: '— Call *Ana* now', start: 8, end: 11 });   // spaces stay outside
+  assert.deepEqual(toggleStyle('— Call **Ana** now', 10, 11, 'b'), { text: '— Call Ana now', start: 8, end: 9 });   // part of a bold stretch unbolds it all
+  assert.equal(join(segments(toggleStyle('— **Ana**', 4, 7, 'i').text, base)), '— ***Ana***');
+  assert.deepEqual(segments('— ***Ana***', base).filter(x => x.k === '').map(x => x.f), ['bi']);
+  assert.equal(toggleStyle('19:00 ', 0, 0, 'b'), null);
 });
 
 test('clock reads start times, ignoring markers', () => {

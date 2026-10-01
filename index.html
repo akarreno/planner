@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Planner">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -27,6 +27,7 @@
   <input id="q" type="search" placeholder="Search archived days" autocomplete="off" aria-label="Search archived days">
 </div>
 <main id="main"></main>
+<button class="fold" id="fold" data-mode="collapse" data-icon="fold" aria-label="Collapse all"></button>
 <button class="fab" id="menu" data-icon="more" aria-label="Menu"><span class="dot" id="dot" hidden></span></button>
 <div class="kb" id="kb" role="toolbar" aria-label="Line tools" hidden>
   <div class="kb-row" id="kb-tools">
@@ -34,20 +35,24 @@
     <button class="ib" data-kb="outdent" data-icon="outdent" aria-label="Outdent"></button>
     <button class="ib" data-kb="indent" data-icon="indent" aria-label="Indent"></button>
     <button class="ib" data-kb="done" data-icon="check" aria-label="Mark done"></button>
-    <button class="ib" data-kb="mark" data-icon="mark" aria-label="Highlight"></button>
+    <button class="ib aa" data-kb="styles" aria-label="Text styles and highlight">Aa</button>
     <button class="ib" data-kb="link" data-icon="link" aria-label="Add or edit link"></button>
     <button class="ib" data-kb="up" data-icon="up" aria-label="Move up"></button>
     <button class="ib" data-kb="down" data-icon="down" aria-label="Move down"></button>
     <button class="ib" data-kb="move" data-icon="move" aria-label="Move to another day"></button>
     <button class="ib" data-kb="close" data-icon="hide" aria-label="Hide keyboard"></button>
   </div>
-  <div class="kb-row" id="kb-colors" hidden>
+  <div class="kb-row" id="kb-styles" hidden>
+    <button class="ib st" data-style="b" aria-label="Bold"><b>B</b></button>
+    <button class="ib st" data-style="i" aria-label="Italic"><i>I</i></button>
+    <button class="ib st" data-style="u" aria-label="Underline"><u>U</u></button>
+    <button class="ib st" data-style="s" aria-label="Strikethrough"><s>S</s></button>
     <button class="sw-c" data-hl="purple" aria-label="Purple highlight"></button>
     <button class="sw-c" data-hl="pink" aria-label="Pink highlight"></button>
     <button class="sw-c" data-hl="orange" aria-label="Orange highlight"></button>
     <button class="sw-c" data-hl="mint" aria-label="Mint highlight"></button>
     <button class="sw-c" data-hl="blue" aria-label="Blue highlight"></button>
-    <button class="ib" data-hl="" data-icon="close" aria-label="No highlight"></button>
+    <button class="ib" data-kb="back" data-icon="back" aria-label="Back to line tools"></button>
   </div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>

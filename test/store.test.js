@@ -52,3 +52,18 @@ test('a backup packs the whole planner and restores it as one undoable step', as
   assert.equal(text(id), 'changed');
   assert.equal([...state.lines.values()].some(l => l.text === 'added later'), true);
 });
+
+test('importing adds to existing days and Later, and replaces templates only by name', async () => {
+  const s = await import('../js/store.js?import');
+  const { importNote, importTemplates } = await import('../js/parse.js');
+  const texts = c => s.linesOf(c).map(l => l.text);
+  s.tx(() => s.addToPlanner(importNote('Thursday October 1\n09:00 Wake Up\nLater:\n— Old idea', { base: '2026-10-01' })));
+  s.tx(() => s.addToPlanner(importNote('Thursday October 1\n14:00 Lunch\nFriday October 2\n— Pack\nLater:\n— New idea', { base: '2026-10-01' })));
+  assert.deepEqual(texts(s.dayOn('2026-10-01').id), ['09:00 Wake Up', '', '14:00 Lunch']);
+  assert.deepEqual(texts(s.dayOn('2026-10-02').id), ['— Pack']);
+  assert.deepEqual(texts(s.LATER), ['— Old idea', '', '— New idea']);
+
+  s.tx(() => s.importTemplateList(importTemplates('Monday\n07:30 Gym\nSaturday\n10:00 Gym')));
+  s.tx(() => s.importTemplateList(importTemplates('Monday\n06:00 Run')));
+  assert.deepEqual(s.templates().map(t => [t.name, texts(t.id)]), [['Monday', ['06:00 Run']], ['Saturday', ['10:00 Gym']]]);
+});

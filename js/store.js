@@ -1,10 +1,11 @@
 // Planner data: days, lines and templates, kept in memory and saved on this device.
 // Every change goes through set/remove, so it can be undone, redrawn and synced record by record.
+import { toggleStyle } from './parse.js';
 
 export const LATER = 'later';   // container id of the Later list
 export const state = {
   days: new Map(),    // id → { id, date, fold, arch }
-  lines: new Map(),   // id → { id, c: container id (day, template or LATER), pos, text, ind, done, fold, hl?: highlight color }
+  lines: new Map(),   // id → { id, c: container id (day, template or LATER), pos, text, ind, done, fold }
   tpls: new Map(),    // id → { id, name, pos, fold }
   prefs: { hideDone: true, laterFold: false },
   // Sync bookkeeping: the signed-in account, the newest server time seen, and records changed here but not sent yet.
@@ -145,6 +146,11 @@ export function markAllDirty() {
   changed();
 }
 
+// Highlights used to color a whole line (an hl field); now they mark text inside the line.
+function fromLineHighlight({ hl, ...l }) {
+  return hl ? { ...l, text: toggleStyle(l.text, 0, 0, 'h', hl)?.text ?? l.text } : l;
+}
+
 // ---- Saving on this device ----
 
 export function save() {
@@ -165,6 +171,7 @@ export function load() {
   for (const d of data.days) state.days.set(d.id, d);
   for (const t of data.tpls) state.tpls.set(t.id, t);
   for (const l of data.lines) { state.lines.set(l.id, l); reindex(l); }
+  for (const l of state.lines.values()) if ('hl' in l) set(state.lines, fromLineHighlight(l));
   if (data.v === 2) {   // version 1 had other defaults: keep the new ones
     state.prefs = { ...state.prefs, ...data.prefs };
     state.sync = { ...data.sync, dirty: new Map(data.sync.dirty) };
@@ -212,7 +219,7 @@ function slots(c, i, n, skip) {
 // Inserts rows ({ text, ind, fold? }) at index i of container c and returns the new lines.
 export function insert(c, i, rows) {
   const pos = slots(c, i, rows.length);
-  return rows.map((r, k) => add(state.lines, { id: uid(), c, pos: pos[k], text: r.text, ind: r.ind, done: false, fold: !!r.fold, ...(r.hl && { hl: r.hl }) }));
+  return rows.map((r, k) => add(state.lines, { id: uid(), c, pos: pos[k], text: r.text, ind: r.ind, done: false, fold: !!r.fold }));
 }
 
 // Moves a block to index i of container c (index counted without the block), with its first line at indent ind.
@@ -240,11 +247,24 @@ export function replacePlanner({ days, later }) {
   insert(LATER, 0, later);
 }
 
-// Swaps all templates for imported ones: [{ name, lines }].
-export function replaceTemplates(list) {
-  for (const tp of templates()) { removeLines(linesOf(tp.id)); remove(state.tpls, tp.id); }
-  list.forEach((t, k) => {
-    const tpl = add(state.tpls, { id: uid(), name: t.name, pos: k, fold: true });
+// Adds imported content to the planner: each day's lines go at the end of that day (created if needed),
+// and Later lines at the end of Later, after a blank line where there's already something.
+export function addToPlanner({ days, later }) {
+  const append = (c, rows) => {
+    if (!rows.length) return;
+    const list = linesOf(c);
+    insert(c, list.length, list.length && list.at(-1).text.trim() ? [{ text: '', ind: 0 }, ...rows] : rows);
+  };
+  for (const d of days) append(ensureDay(d.date).id, d.lines);
+  append(LATER, later);
+}
+
+// Imported templates ([{ name, lines }]) replace templates with the same name; the others stay.
+export function importTemplateList(list) {
+  for (const t of list) {
+    const old = templates().find(tp => tp.name.toLowerCase() === t.name.toLowerCase());
+    if (old) removeLines(linesOf(old.id));
+    const tpl = old ?? add(state.tpls, { id: uid(), name: t.name, pos: (templates().at(-1)?.pos ?? -1) + 1, fold: true });
     insert(tpl.id, 0, t.lines);
-  });
+  }
 }

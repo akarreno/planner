@@ -1,20 +1,20 @@
 // Editing in place: tap a line to type into it, keys that behave like Notes,
 // and the toolbar that rides above the keyboard.
 import { state, tx, typed, undo, update, remove, insert, block, moveBlock, indexOf, linesOf } from './store.js';
-import { parseLines, segments, isUrl, linkText, linkAt, linkify } from './parse.js';
+import { parseLines, segments, isUrl, linkText, linkAt, linkify, toggleStyle, stylesAt } from './parse.js';
 import { main, render } from './view.js';
 import { moveSheet, toggleDone, linkSheet } from './menus.js';
 import { anchorsIn, toast } from './ui.js';
 
 const L = state.lines;
-const bar = document.getElementById('kb'), tools = document.getElementById('kb-tools'), colors = document.getElementById('kb-colors');
+const bar = document.getElementById('kb'), tools = document.getElementById('kb-tools'), styles = document.getElementById('kb-styles');
 // Plain-text editing keeps pasted formatting out; engines without it fall back to regular editing.
 const EDITABLE = (() => { const d = document.createElement('div'); d.contentEditable = 'plaintext-only'; return d.contentEditable === 'plaintext-only' ? 'plaintext-only' : 'true'; })();
 let cur = null;   // { id, row, tx } for the line being edited
 const line = () => L.get(cur.id);
 const inMirror = () => !!cur?.row.classList.contains('mir');
 
-export function edit(row, offset) {
+export function edit(row, offset, end) {
   const l = L.get(row.dataset.id), tx = row.firstChild;
   if (!l) return;
   if (cur?.tx !== tx) {
@@ -24,14 +24,14 @@ export function edit(row, offset) {
     tx.contentEditable = EDITABLE;
   } else if (tx.textContent !== l.text) tx.textContent = l.text;
   if (document.activeElement !== tx) tx.focus();
-  setCaret(tx, offset ?? l.text.length);
+  setCaret(tx, offset ?? l.text.length, end);
   syncBar();
 }
 
-export function focusLine(id, offset, mirror = false) {
+export function focusLine(id, offset, mirror = false, end) {
   const rows = [...main.querySelectorAll(`.ln[data-id="${id}"]`)];
   const row = rows.find(r => r.classList.contains('mir') === mirror) ?? rows[0];
-  if (row) edit(row, offset);
+  if (row) edit(row, offset, end);
 }
 
 // Starts editing where the finger or pointer landed. A drawn link shows only its label, so the
@@ -43,9 +43,9 @@ export function editAt(row, x, y) {
 
 function rawOffset(text, shown) {
   let d = 0, r = 0;
-  for (const [k, s, label] of segments(text)) {
-    const len = k === 'l' ? label.length : s.length;
-    if (shown <= d + len) return r + (k === 'l' ? 1 : 0) + shown - d;   // inside a link label: just after "["
+  for (const { k, s, label } of segments(text)) {
+    const len = k === 'f' ? 0 : k === 'l' ? label.length : s.length;   // style markers aren't drawn
+    if (len && shown <= d + len) return r + (k === 'l' ? 1 : 0) + shown - d;   // inside a link label: just after "["
     d += len;
     r += s.length;
   }
@@ -111,12 +111,16 @@ function caret(el) {
   return [start, start + r.toString().length];
 }
 
-function setCaret(el, offset) {
-  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), r = document.createRange();
-  let n, left = offset;
-  while ((n = walk.nextNode()) && left > n.length) left -= n.length;
-  if (n) r.setStart(n, left); else r.setStart(el, el.childNodes.length);
-  r.collapse(true);
+// Puts the caret at offset, or selects offset..end.
+function setCaret(el, offset, end = offset) {
+  const r = document.createRange(), at = pos => {
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let n, left = pos;
+    while ((n = walk.nextNode()) && left > n.length) left -= n.length;
+    return n ? [n, left] : [el, el.childNodes.length];
+  };
+  r.setStart(...at(offset));
+  r.setEnd(...at(end));
   const s = getSelection();
   s.removeAllRanges();
   s.addRange(r);
@@ -215,6 +219,30 @@ function setLink(start, end, url) {
   act(() => update(L, l.id, { text: next }), l.id, next.length - (text.length - end));
 }
 
+// ---- Styles ----
+
+// Bold, italic, underline, strikethrough (flag b i u s) or a highlight color (flag h) for the selected
+// words, or the whole line when nothing is selected. Styling it again takes it off. The words stay selected.
+function style(flag, color) {
+  const l = line(), [start, end] = caret(cur.tx), r = toggleStyle(cur.tx.textContent, start, end, flag, color);
+  if (!r) return;
+  const mirror = inMirror();
+  tx(() => update(L, l.id, { text: r.text }));
+  render();
+  focusLine(l.id, start === end ? r.end : r.start, mirror, r.end);
+  showStyles(!styles.hidden);
+}
+
+// The Aa button swaps the tools for the style row; the back button swaps them back.
+function showStyles(on) {
+  tools.hidden = on;
+  styles.hidden = !on;
+  if (!on || !cur) return;
+  const { f, hl } = stylesAt(cur.tx.textContent, caret(cur.tx)[0]);
+  for (const b of styles.querySelectorAll('[data-style]')) b.classList.toggle('on', f.includes(b.dataset.style));
+  for (const b of styles.querySelectorAll('[data-hl]')) b.classList.toggle('on', hl === b.dataset.hl);
+}
+
 // Add or edit a link (⌘K, or the toolbar): on the link under the caret, or on the selected text.
 function openLink() {
   const l = line(), text = cur.tx.textContent;
@@ -242,6 +270,8 @@ main.addEventListener('keydown', e => {
   else if ((k === 'ArrowUp' || k === 'ArrowDown') && !e.shiftKey && !mod && atEdge(k === 'ArrowUp')) done = step(k === 'ArrowUp' ? -1 : 1);
   else if (k === 'Escape') done = cur.tx.blur();
   else if (mod && k.toLowerCase() === 'k') done = openLink();
+  else if (mod && !e.shiftKey && 'biu'.includes(k.toLowerCase())) done = style(k.toLowerCase());
+  else if (mod && e.shiftKey && k.toLowerCase() === 'x') done = style('s');
   else if (mod && k.toLowerCase() === 'z') done = e.shiftKey || undoLast();   // redo isn't supported
   else return;
   if (done !== false) e.preventDefault();
@@ -308,8 +338,8 @@ bar.addEventListener('pointerdown', e => e.preventDefault());   // keep focus, a
 bar.addEventListener('mousedown', e => e.preventDefault());
 bar.addEventListener('click', e => {
   if (!cur) return;
-  const color = e.target.closest('[data-hl]');
-  if (color) return highlight(color.dataset.hl || null);
+  const s = e.target.closest('[data-style], [data-hl]');
+  if (s) return s.dataset.hl ? style('h', s.dataset.hl) : style(s.dataset.style);
   const b = e.target.closest('[data-kb]');
   if (!b) return;
   ({
@@ -321,28 +351,16 @@ bar.addEventListener('click', e => {
     move: () => { const l = line(); cur.tx.blur(); moveSheet(l); },
     link: openLink,
     undo: undoLast,
-    mark: () => showColors(true),
+    styles: () => showStyles(true),
+    back: () => showStyles(false),
     close: () => cur.tx.blur(),
   })[b.dataset.kb]();
 });
 
-// The highlight button swaps the tools for a row of colors; picking one (or none) swaps them back.
-function showColors(on) {
-  tools.hidden = on;
-  colors.hidden = !on;
-  if (on) for (const b of colors.querySelectorAll('[data-hl]')) b.classList.toggle('on', (line().hl || '') === b.dataset.hl);
-}
-
-function highlight(color) {
-  const l = line(), [offset] = caret(cur.tx);
-  act(() => update(L, l.id, { hl: color }), l.id, offset);
-  showColors(false);
-}
-
 function syncBar() {
   const on = !!cur && document.activeElement === cur.tx;
   bar.hidden = !on;
-  if (!on) showColors(false);
+  if (!on) showStyles(false);
   document.body.classList.toggle('editing', on);
   if (!on) return;
   placeBar();

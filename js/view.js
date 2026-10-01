@@ -49,6 +49,17 @@ export function render() {
   const keep = new Set(want);
   for (const [k, el] of sections) if (!keep.has(el)) sections.delete(k);
   place(main, want);
+  syncFold(list);
+}
+
+// The collapse/expand button collapses everything if anything on screen is open, else expands everything.
+function syncFold(list) {
+  const btn = $('fold'), mode = list.some(sec => !sec.fold) ? 'collapse' : 'expand';
+  btn.hidden = !list.length;
+  if (btn.dataset.mode === mode) return;
+  btn.dataset.mode = mode;
+  btn.setAttribute('aria-label', mode === 'collapse' ? 'Collapse all' : 'Expand all');
+  btn.replaceChildren(icon(mode === 'collapse' ? 'fold' : 'unfold'));
 }
 
 // First run: nothing here yet.
@@ -219,11 +230,8 @@ function paintRow(row, { l, kids }, now, mirror) {
   cl.toggle('nowb', isNow);
   if (isNow) row.dataset.now = now.label; else if (row.dataset.now) delete row.dataset.now;
   if (row.ind !== l.ind) { row.ind = l.ind; row.style.setProperty('--i', l.ind); }
-  const hl = l.hl || '';
-  if ((row.dataset.hl ?? '') !== hl) { if (hl) row.dataset.hl = hl; else delete row.dataset.hl; }
-  // The line being edited shows its raw text; everything else is redrawn only when its text or color changed.
-  const key = `${hl}\n${l.text}`;
-  if (!cl.contains('ed') && row.key !== key) { row.key = key; paintText(row.firstChild, l.text, hl); }
+  // The line being edited shows its raw text; everything else is redrawn only when its text changed.
+  if (!cl.contains('ed') && row.key !== l.text) { row.key = l.text; paintText(row.firstChild, l.text); }
   const foldKey = kids ? `${kids}${l.fold ? '+' : '-'}` : '';
   if (row.foldKey !== foldKey) {
     row.foldKey = foldKey;
@@ -236,8 +244,15 @@ function paintRow(row, { l, kids }, now, mirror) {
 // Web links open in a new tab; app links (a note, a shortcut) open their app.
 const link = (href, label) => href ? h('a', { href, target: /^https?:/i.test(href) ? '_blank' : null, rel: 'noopener' }, label) : label;
 
-function paintText(tx, text, hl) {
-  const parts = segments(text).map(([k, s, label, href]) =>
-    k === 'l' ? link(href, label) : k === 'u' ? link(s, s) : k ? h('span', { className: 's-' + k }, s) : s);
-  if (hl && text.trim()) tx.replaceChildren(h('mark', {}, parts)); else tx.replaceChildren(...parts);
+// Styled stretches get a span with a class per style (fb fi fu fs); highlights are <mark data-c="color">.
+function paintText(tx, text) {
+  const parts = [];
+  for (const { k, s, label, href, f, hl } of segments(text)) {
+    if (k === 'f') continue;
+    let node = k === 'l' ? link(href, label) : k === 'u' ? link(s, s) : k ? h('span', { className: 's-' + k }, s) : s;
+    if (f) node = h('span', { className: [...f].map(x => 'f' + x).join(' ') }, node);
+    if (hl) node = h('mark', { 'data-c': hl }, node);
+    parts.push(node);
+  }
+  tx.replaceChildren(...parts);
 }

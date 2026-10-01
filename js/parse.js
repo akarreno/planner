@@ -51,24 +51,125 @@ const INLINE = /\[([^[\]\n]+)\]\(([^()\s]+)\)|\(\?\)|https?:\/\/\S+/g;
 export const NUMBERED = /^\d+[.)]\s/;
 const minutes = s => { const i = s.indexOf(':'); return s.slice(0, i) * 60 + +s.slice(i + 1); };
 
-// The parts of a line for display, as [kind, text] pairs that join back to the exact line.
-// Kinds: 'm' marker, 't' time, 'd' date, 'q' "(?)", 'u' bare web address, '' plain text,
-// and 'l' for [label](address), which also carries the label and a safe address: ['l', text, label, href].
+// Text styles: **bold**, *italic*, __underline__, ~~strikethrough~~, and highlights, =={pink}like this==
+// in one of five colors. A marker opens before a non-space and closes after one, so "5 * 3" and "a == b"
+// stay as typed; a marker without a partner is plain text.
+export const COLORS = ['purple', 'pink', 'orange', 'mint', 'blue'];
+const STYLE = { '**': 'b', '*': 'i', '__': 'u', '~~': 's', '==': 'h' };
+const MARK = Object.fromEntries(Object.entries(STYLE).map(([m, f]) => [f, m]));
+const RUN = new RegExp(String.raw`\*{1,3}|__|~~|==(?:\{(${COLORS.join('|')})\})?`, 'g');
+
+// The line from index `from` on, as pieces with their index `at`: links and the like, paired style
+// markers (k 'f', with their kind `m`, a highlight's `color`, and their `mate`), and plain text.
+function pieces(text, from) {
+  const out = [];
+  const plain = (a, b) => {
+    let p = a;
+    for (const r of text.slice(a, b).matchAll(RUN)) {
+      const at = a + r.index, run = r[0];
+      if (at > p) out.push({ k: '', s: text.slice(p, at), at: p });
+      const open = /\S/.test(text[at + run.length] ?? ''), close = !r[1] && /\S/.test(text[at - 1] ?? '');
+      // "***" is bold and italic: inner marker next to the text, so it closes first.
+      let q = at;
+      for (const s of run === '***' ? (open && !close ? ['**', '*'] : ['*', '**']) : [run]) {
+        out.push({ k: 'f', s, m: s.slice(0, 2) === '==' ? '==' : s, color: r[1], at: q, open, close });
+        q += s.length;
+      }
+      p = at + run.length;
+    }
+    if (p < b) out.push({ k: '', s: text.slice(p, b), at: p });
+  };
+  let j = from;
+  for (const m of text.slice(from).matchAll(INLINE)) {
+    const at = from + m.index;
+    plain(j, at);
+    out.push(m[1] ? { k: 'l', s: m[0], label: m[1], href: safeUrl(m[2]), at } : { k: m[0] === '(?)' ? 'q' : 'u', s: m[0], at });
+    j = at + m[0].length;
+  }
+  plain(j, text.length);
+  // A closing marker pairs with the nearest open one of the same kind that has text between them.
+  const stack = [];
+  for (const p of out) {
+    if (p.k !== 'f') continue;
+    const k = stack.findLastIndex(o => o.m === p.m);
+    if (p.close && k >= 0 && p.at > stack[k].at + stack[k].s.length) { stack[k].mate = p; p.mate = stack[k]; stack.length = k; }
+    else if (p.open) stack.push(p);
+  }
+  for (const p of out) if (p.k === 'f' && !p.mate) p.k = '';
+  return out;
+}
+
+// Length of a line's head: its marker, time or date, and the spaces after them.
+function headLength(text, base) {
+  const h = HEAD.exec(text);
+  let i = h[0].length;
+  if (!h[2]) i += dateAt(text.slice(i), base)?.len ?? 0;
+  while (/\s/.test(text[i] ?? '')) i++;
+  return i;
+}
+
+// The parts of a line for display, as { k, s } pieces whose s join back to the exact line.
+// k: 'm' marker, 't' time, 'd' date, 'q' "(?)", 'u' bare web address, 'l' [label](address) (with label
+// and a safe href), 'f' a style marker (not shown), '' plain text. f lists the styles in effect (b i u s)
+// and hl the highlight color.
 export function segments(text, base = today()) {
   const out = [], h = HEAD.exec(text);
   let i = 0;
-  if (h[1]) { out.push(['m', h[1]]); i = h[1].length; }
-  if (h[2]) { out.push(['t', h[0].slice(i)]); i = h[0].length; }
-  else { const d = dateAt(text.slice(i), base); if (d) { out.push(['d', text.slice(i, i + d.len)]); i += d.len; } }
-  const rest = text.slice(i);
-  let j = 0;
-  for (const m of rest.matchAll(INLINE)) {
-    if (m.index > j) out.push(['', rest.slice(j, m.index)]);
-    out.push(m[1] ? ['l', m[0], m[1], safeUrl(m[2])] : [m[0] === '(?)' ? 'q' : 'u', m[0]]);
-    j = m.index + m[0].length;
+  if (h[1]) { out.push({ k: 'm', s: h[1] }); i = h[1].length; }
+  if (h[2]) { out.push({ k: 't', s: h[0].slice(i) }); i = h[0].length; }
+  else { const d = dateAt(text.slice(i), base); if (d) { out.push({ k: 'd', s: text.slice(i, i + d.len) }); i += d.len; } }
+  const on = { b: 0, i: 0, u: 0, s: 0 }, colors = [];
+  for (const p of pieces(text, i)) {
+    if (p.k === 'f') {
+      const opens = p.mate.at > p.at;
+      if (p.m === '==') { if (opens) colors.push(p.color ?? COLORS[0]); else colors.pop(); }
+      else on[STYLE[p.m]] += opens ? 1 : -1;
+      out.push({ k: 'f', s: p.s });
+      continue;
+    }
+    const seg = p.k === 'l' ? { k: 'l', s: p.s, label: p.label, href: p.href } : { k: p.k, s: p.s };
+    const f = Object.keys(on).filter(x => on[x] > 0).join('');
+    if (f) seg.f = f;
+    if (colors.length) seg.hl = colors.at(-1);
+    const last = out.at(-1);
+    if (seg.k === '' && last?.k === '' && last.f === seg.f && last.hl === seg.hl) last.s += seg.s; else out.push(seg);
   }
-  if (j < rest.length) out.push(['', rest.slice(j)]);
   return out;
+}
+
+// The styles in effect at a position in the line: { f: like "bi", hl: a color or undefined }.
+export function stylesAt(text, pos) {
+  let r = 0;
+  for (const seg of segments(text)) {
+    r += seg.s.length;
+    if (seg.k !== 'f' && pos < r) return { f: seg.f ?? '', hl: seg.hl };
+  }
+  return { f: '', hl: undefined };
+}
+
+// Turns a style on or off for the selection [start, end); with nothing selected, for the whole line after
+// its time or date. Inside text that already has the style, it removes it from that whole stretch; inside
+// a highlight of another color, it changes the color. flag: b i u s, or h with a color.
+// Returns { text, start, end } with the new selection, or null when there's nothing to style.
+export function toggleStyle(text, start, end, flag, color) {
+  const head = headLength(text, today()), mark = flag === 'h' ? `=={${color}}` : MARK[flag], kind = MARK[flag];
+  let s = Math.max(start, head), e = Math.max(end, head);
+  if (s === e) { s = head; e = text.length; }
+  while (s < e && /\s/.test(text[s])) s++;
+  while (e > s && /\s/.test(text[e - 1])) e--;
+  if (s >= e) return null;
+  for (const p of pieces(text, head)) {
+    if (p.k !== 'f' || p.m !== kind || p.mate.at < p.at) continue;
+    const a = p.at + p.s.length, b = p.mate.at, z = b + p.mate.s.length;
+    if (s < p.at || e > z) continue;
+    if (flag === 'h' && (p.color ?? COLORS[0]) !== color) {   // another color: recolor the stretch
+      const d = mark.length - p.s.length;
+      return { text: text.slice(0, p.at) + mark + text.slice(a), start: s < a ? s : s + d, end: e + d };
+    }
+    const shift = x => (x <= p.at ? x : x <= a ? p.at : x <= b ? x - p.s.length : b - p.s.length);
+    return { text: text.slice(0, p.at) + text.slice(a, b) + text.slice(z), start: shift(s), end: shift(e) };
+  }
+  return { text: text.slice(0, s) + mark + text.slice(s, e) + kind + text.slice(e), start: s + mark.length, end: e + mark.length };
 }
 
 // ---- Links ----
