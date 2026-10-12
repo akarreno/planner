@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify, fitTime, withTime, hhmm, toggleStyle, stylesAt } from '../js/parse.js';
+import { segments, clock, leadDate, kind, parseLines, importNote, importTemplates, exportText, today, dayTitle, safeUrl, isUrl, linkText, linkAt, linkify, fitTime, withTime, hhmm, toggleStyle, stylesAt, visibleText, findAll } from '../js/parse.js';
 import { NOTE, TEMPLATE, BASE as base } from './fixture.js';
 
 const join = segs => segs.map(x => x.s).join('');
@@ -79,6 +79,14 @@ test('toggleStyle styles the selection, or the whole line after its time, and tu
   assert.equal(join(segments(toggleStyle('— **Ana**', 4, 7, 'i').text, base)), '— ***Ana***');
   assert.deepEqual(segments('— ***Ana***', base).filter(x => x.k === '').map(x => x.f), ['bi']);
   assert.equal(toggleStyle('19:00 ', 0, 0, 'b'), null);
+});
+
+test('search matches what is drawn, ignoring case and accents', () => {
+  assert.equal(visibleText('— **[Food diary](https://x.com)** =={pink}daily=='), '— Food diary daily');
+  assert.deepEqual(findAll('Hacer lista súper mañana', 'manana'), [[18, 24]]);
+  assert.deepEqual(findAll('Gym, then GYM again', 'gym'), [[0, 3], [10, 13]]);
+  assert.deepEqual(findAll('Café', 'cafe'), [[0, 4]]);
+  assert.deepEqual(findAll('anything', '  '), []);
 });
 
 test('clock reads start times, ignoring markers', () => {

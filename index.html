@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -24,10 +25,13 @@
   </div>
 </header>
 <div class="search" id="search" hidden>
-  <input id="q" type="search" placeholder="Search archived days" autocomplete="off" aria-label="Search archived days">
+  <input id="q" type="search" placeholder="Search planner" autocomplete="off" enterkeyhint="search" aria-label="Search">
+  <span class="hint" id="q-count"></span>
+  <button class="done-btn" id="q-done">Done</button>
 </div>
 <main id="main"></main>
-<button class="fold" id="fold" data-mode="collapse" data-icon="fold" aria-label="Collapse all"></button>
+<button class="mini find" id="find" data-icon="search" aria-label="Search"></button>
+<button class="mini fold" id="fold" data-mode="collapse" data-icon="fold" aria-label="Collapse all"></button>
 <button class="fab" id="menu" data-icon="more" aria-label="Menu"><span class="dot" id="dot" hidden></span></button>
 <div class="kb" id="kb" role="toolbar" aria-label="Line tools" hidden>
   <div class="kb-row" id="kb-tools">

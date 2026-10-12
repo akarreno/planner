@@ -1,6 +1,6 @@
 // Sheets and undoable actions: menus, Fill days, Move to, import, copy, and the sync account.
 import {
-  state, LATER, tx, canUndo, restoreCopy, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
+  state, LATER, tx, tidy, canUndo, restoreCopy, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
   fillDays, replacePlanner, addToPlanner, importTemplateList, activeDays, archivedDays, templates, dayOn, ensureDay,
 } from './store.js';
 import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText, safeUrl } from './parse.js';
@@ -19,13 +19,14 @@ export function toggleDone(line) {
   if (state.prefs.hideDone && !line.done) toast('Marked done', undo);
 }
 
-export const removeWithUndo = blk => undoable(blk.length > 1 ? `Deleted ${plural(blk.length, 'line')}` : 'Deleted line', () => removeLines(blk));
+export const removeWithUndo = blk => undoable(blk.length > 1 ? `Deleted ${plural(blk.length, 'line')}` : 'Deleted line', () => { removeLines(blk); tidy(blk[0].c); });
 
 export function moveSheet(line) {
   const t = today(), blk = block(line);
   const to = (target, label) => undoable(`Moved to ${label}`, () => {
-    const c = target === LATER ? LATER : ensureDay(target).id;
+    const c = target === LATER ? LATER : ensureDay(target).id, from = line.c;
     moveBlock(blk, c, linesOf(c).length, 0);
+    tidy(from);
   });
   const dates = [...new Set([t, addDays(t, 1), ...activeDays().map(d => d.date).filter(d => d >= t)])].sort();
   const here = state.days.get(line.c)?.date;

@@ -1,27 +1,47 @@
 // Draws the current screen from state. Sections and rows are keyed by id and only touched when
 // something about them changed, so the line being edited keeps its focus and caret.
 import { state, LATER, linesOf, activeDays, archivedDays, templates, dayOn } from './store.js';
-import { segments, kind, clock, leadDate, headTitle, today, addDays, nowMinutes, clockLabel, afterMidnight, NUMBERED } from './parse.js';
+import { segments, kind, clock, leadDate, headTitle, today, addDays, nowMinutes, clockLabel, afterMidnight, visibleText, findAll, NUMBERED } from './parse.js';
 import { h, icon } from './ui.js';
 
 export const main = document.getElementById('main');
-export const ui = { screen: 'plan', query: '' };
+// finding: the planner's search bar is open; query: what's typed there (or in the archive's search);
+// editing: id of the line being typed in.
+export const ui = { screen: 'plan', query: '', finding: false, editing: null };
 const $ = id => document.getElementById(id);
 const TITLES = { tpl: 'Templates', arch: 'Archive' };
 const sections = new Map();   // key → <section>
 const extras = {};            // non-section elements, created once
 
 // The planner has no top bar; Templates and Archive get one with a back button.
-export function go(screen) {
+export function go(screen, query = '') {
   ui.screen = screen;
+  ui.finding = false;
   const sub = screen !== 'plan';
   $('title').textContent = TITLES[screen] ?? '';
   $('bar').hidden = !sub;
-  $('search').hidden = screen !== 'arch';
-  $('menu').hidden = sub;
+  $('menu').hidden = $('find').hidden = sub;
   document.body.classList.toggle('sub', sub);
-  render();
+  search(query);
   scrollTo(0, 0);
+}
+
+// The search bar: always on the Archive screen, opened with the search button on the planner.
+export function setFinding(on) {
+  ui.finding = on;
+  search('');
+  if (on) $('q').focus();
+}
+
+export function search(query) {
+  ui.query = query;
+  const q = $('q'), bar = $('search');
+  if (q.value !== query) q.value = query;
+  bar.hidden = !(ui.screen === 'arch' || ui.finding);
+  document.body.classList.toggle('finding', ui.finding);
+  q.placeholder = ui.screen === 'arch' ? 'Search archived days' : 'Search planner';
+  $('q-done').hidden = ui.screen !== 'plan';
+  render();
 }
 
 export function scrollToDate(date) {
@@ -40,16 +60,44 @@ export function scrollToNow() {
 
 export function render() {
   const t = today();
-  const list = ui.screen === 'plan' ? planSections(t) : ui.screen === 'tpl' ? tplSections() : archiveSections();
+  const finding = ui.screen === 'plan' && ui.finding && ui.query.trim();
+  const list = finding ? searchSections(t) : ui.screen === 'plan' ? planSections(t) : ui.screen === 'tpl' ? tplSections() : archiveSections();
   const fresh = ui.screen === 'plan' && !state.days.size && !state.lines.size;
   const want = fresh ? [welcome()] : list.map(paintSection);
-  if (ui.screen === 'plan' && !fresh && want.length === 1) want.unshift(extra('empty', 'p', 'No days planned. Open the menu and use Fill days to add the coming week from your templates.'));
+  if (finding) {
+    const n = list.reduce((sum, sec) => sum + sec.entries.length, 0);
+    setText($('q-count'), n ? `${n} line${n === 1 ? '' : 's'}` : '');
+    if (!n) want.push(extra('empty', 'p', 'No line has that text.'));
+  } else setText($('q-count'), '');
+  if (ui.screen === 'plan' && !fresh && !finding && want.length === 1) want.unshift(extra('empty', 'p', 'No days planned. Open the menu and use Fill days to add the coming week from your templates.'));
   if (ui.screen === 'arch' && !want.length) want.push(extra('empty', 'p', ui.query ? 'No archived day has that text.' : 'Archived days show up here.'));
   if (ui.screen === 'tpl') want.push(extras.newTpl ??= h('button', { className: 'act add-tpl', 'data-act': 'new-tpl' }, 'New template'));
   const keep = new Set(want);
   for (const [k, el] of sections) if (!keep.has(el)) sections.delete(k);
   place(main, want);
   syncFold(list);
+  showHits();
+}
+
+// Marks the searched text in the lines on screen, without touching them (CSS Custom Highlight API).
+function showHits() {
+  if (!globalThis.Highlight || !CSS.highlights) return;
+  const ranges = [];
+  if (ui.query.trim() && (ui.finding || ui.screen === 'arch')) {
+    for (const tx of main.querySelectorAll('.ln .tx')) {
+      const nodes = [], walk = document.createTreeWalker(tx, NodeFilter.SHOW_TEXT);
+      let text = '';
+      for (let n; (n = walk.nextNode());) { nodes.push([n, text.length]); text += n.data; }
+      const at = i => { const k = nodes.findLastIndex(([, start]) => start <= i); return [nodes[k][0], i - nodes[k][1]]; };
+      for (const [a, b] of findAll(text, ui.query)) {
+        const r = document.createRange(), [last, offset] = at(b - 1);   // the match's last character
+        r.setStart(...at(a));
+        r.setEnd(last, offset + 1);
+        ranges.push(r);
+      }
+    }
+  }
+  CSS.highlights.set('find', new Highlight(...ranges));
 }
 
 // The collapse/expand button collapses everything if anything on screen is open, else expands everything.
@@ -96,7 +144,12 @@ function outline(list) {
     if (l.fold && kids) hideBelow = l.ind;
     if (!(state.prefs.hideDone && l.done)) out.push({ l, kids });
   }
-  return out;
+  // Hidden lines can leave blank lines next to each other: show at most one in a row, none at the ends.
+  const blank = e => !e.kids && !e.l.text.trim() && e.l.id !== ui.editing;
+  const shown = [];
+  for (const e of out) if (!(blank(e) && (!shown.length || blank(shown.at(-1))))) shown.push(e);
+  while (shown.length && blank(shown.at(-1))) shown.pop();
+  return shown;
 }
 
 const countOf = c => linesOf(c).filter(l => l.text.trim()).length;
@@ -149,13 +202,29 @@ function planSections(t) {
 const tplSections = () => templates().map(tp =>
   ({ key: tp.id, kind: 'tpl', title: tp.name, fold: tp.fold, entries: outline(linesOf(tp.id)), count: countOf(tp.id) }));
 
+const hit = l => findAll(visibleText(l.text), ui.query).length > 0;
+
 function archiveSections() {
-  const q = ui.query.trim().toLowerCase();
+  const q = ui.query.trim();
   return archivedDays().flatMap(d => {
     const lines = linesOf(d.id);
-    if (q && !lines.some(l => l.text.toLowerCase().includes(q))) return [];
+    if (q && !lines.some(hit)) return [];
     return [{ key: d.id, kind: 'arch', title: headTitle(d.date), fold: !q && d.fold, ro: true, pill: ['Restore', 'restore'], entries: outline(lines), count: countOf(d.id) }];
   });
+}
+
+// Planner search: only the matching lines, under their day (or Later), then archived days. Done lines
+// count too. Results can't be edited here: tapping one goes to it in the planner.
+function searchSections(t) {
+  const found = (key, kind, title, chip, lines) => {
+    const entries = lines.filter(hit).map(l => ({ l, kids: 0 }));
+    return entries.length ? [{ key, kind, title, chip, ro: true, entries, count: entries.length }] : [];
+  };
+  return [
+    ...activeDays().flatMap(d => found(d.id, 'day', headTitle(d.date), d.date === t ? 'Today' : '', linesOf(d.id))),
+    ...found(LATER, 'later', 'Later', '', linesOf(LATER)),
+    ...archivedDays().flatMap(d => found(d.id, 'arch', headTitle(d.date), 'Archived', linesOf(d.id))),
+  ];
 }
 
 // ---- Sections ----

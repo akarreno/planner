@@ -28,6 +28,7 @@ const PATHS = {
   hide: 'M6 9.5l6 6 6-6',
   undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   fold: 'M7 3.5l5 5 5-5M7 20.5l5-5 5 5',
+  search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L20 20',
   unfold: 'M7 8.5l5-5 5 5M7 15.5l5 5 5-5',
   link: 'M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1',
   close: 'M6 6l12 12M18 6L6 18',
@@ -66,12 +67,23 @@ const toastEl = document.getElementById('toast');
 let toastTimer = 0;
 
 // A short message, optionally with one action button (Undo unless labelled otherwise).
+// It rises in (see .toast in the stylesheet) and fades out a little faster than it came.
 export function toast(message, action, label = 'Undo', ms = 5000) {
-  toastEl.replaceChildren(h('span', {}, message), action && h('button', { onclick: () => { toastEl.hidden = true; action(); } }, label));
+  toastEl.replaceChildren(h('span', {}, message), action && h('button', { onclick: () => { hideToast(); action(); } }, label));
+  toastEl.classList.remove('out');
   toastEl.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastEl.hidden = true; }, ms);
+  toastTimer = setTimeout(hideToast, ms);
 }
+
+function hideToast() {
+  toastEl.classList.add('out');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; toastEl.classList.remove('out'); }, 150);
+}
+
+// iOS Safari shows a button's :active (pressed) style only when the page listens for touches.
+document.addEventListener('touchstart', () => {}, { passive: true });
 
 // ---- Links in pasted rich text ----
 

@@ -67,3 +67,19 @@ test('importing adds to existing days and Later, and replaces templates only by 
   s.tx(() => s.importTemplateList(importTemplates('Monday\n06:00 Run')));
   assert.deepEqual(s.templates().map(t => [t.name, texts(t.id)]), [['Monday', ['06:00 Run']], ['Saturday', ['10:00 Gym']]]);
 });
+
+test('tidy keeps at most one blank line in a row and none at the ends, sparing the line being typed in', async () => {
+  const s = await import('../js/store.js?tidy');
+  const rows = t => t.split('|').map(text => ({ text, ind: text.startsWith('>') ? 1 : 0 }));
+  const texts = c => s.linesOf(c).map(l => l.text).join('|');
+  s.insert('d', 0, rows('||A|||B| |C||'));
+  s.tidy('d');
+  assert.equal(texts('d'), 'A||B| |C');               // a line of spaces counts as blank
+  s.insert('e', 0, rows('A||'));
+  const typing = s.linesOf('e').at(-1).id;
+  s.tidy('e', typing);
+  assert.equal(texts('e'), 'A||');                   // the last blank is being typed in, the one before separates it
+  s.insert('f', 0, rows('A||>child|B'));
+  s.tidy('f');
+  assert.equal(texts('f'), 'A||>child|B');           // a blank line with sub-items stays
+});

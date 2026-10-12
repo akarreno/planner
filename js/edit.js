@@ -1,8 +1,8 @@
 // Editing in place: tap a line to type into it, keys that behave like Notes,
 // and the toolbar that rides above the keyboard.
-import { state, tx, typed, undo, update, remove, insert, block, moveBlock, indexOf, linesOf } from './store.js';
+import { state, tx, typed, undo, update, remove, insert, block, moveBlock, indexOf, linesOf, tidy } from './store.js';
 import { parseLines, segments, isUrl, linkText, linkAt, linkify, toggleStyle, stylesAt } from './parse.js';
-import { main, render } from './view.js';
+import { main, ui, render } from './view.js';
 import { moveSheet, toggleDone, linkSheet } from './menus.js';
 import { anchorsIn, toast } from './ui.js';
 
@@ -19,6 +19,7 @@ export function edit(row, offset, end) {
   if (!l) return;
   if (cur?.tx !== tx) {
     cur = { id: l.id, row, tx };
+    ui.editing = l.id;
     row.classList.add('ed');
     tx.textContent = l.text;
     tx.contentEditable = EDITABLE;
@@ -65,7 +66,7 @@ export function undoLast() {
 // Adds a line at the end of a container (or reuses a trailing blank one) and starts editing it.
 export function appendLine(c) {
   const list = linesOf(c), last = list.at(-1);
-  if (last && !last.text && !last.ind) return focusLine(last.id, 0);
+  if (last && !last.text && !last.ind) { ui.editing = last.id; render(); return focusLine(last.id, 0); }
   let id;
   act(() => { id = insert(c, list.length, [{ text: '', ind: 0 }])[0].id; }, () => id, 0);
 }
@@ -75,8 +76,10 @@ export function appendLine(c) {
 function act(fn, id, offset) {
   const mirror = inMirror();
   tx(fn);
+  const target = typeof id === 'function' ? id() : id;
+  if (target) ui.editing = target;   // so a new blank line is drawn, not hidden as an extra blank
   render();
-  if (id) focusLine(typeof id === 'function' ? id() : id, offset, mirror);
+  if (target) focusLine(target, offset, mirror);
 }
 
 // ---- Caret ----
@@ -327,8 +330,10 @@ main.addEventListener('focusout', e => {
   tx.contentEditable = 'false';
   tx.parentElement.classList.remove('ed');
   tx.parentElement.key = null;   // redraw the finished line from the saved text
-  if (cur?.tx === tx) cur = null;
-  queueMicrotask(render);
+  if (cur?.tx === tx) cur = ui.editing = null;
+  const c = L.get(tx.parentElement.dataset.id)?.c;
+  // Once the caret has settled (maybe on another line of the same day), drop extra blank lines.
+  queueMicrotask(() => { if (c) tidy(c, cur?.id); render(); });
   requestAnimationFrame(syncBar);
 });
 

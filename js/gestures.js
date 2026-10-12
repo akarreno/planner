@@ -2,13 +2,13 @@
 // long-press (or drag with a mouse) to move a line and its sub-items anywhere, including other days.
 // Touch uses touch events rather than pointer events: iOS cancels pointer events when a long press
 // turns into a move, but lets a touchmove listener take over the move from scrolling.
-import { state, tx, update, block, linesOf, moveBlock } from './store.js';
+import { state, tx, update, block, linesOf, moveBlock, tidy } from './store.js';
 import { clock, fitTime, withTime, hhmm } from './parse.js';
 import { main } from './view.js';
 import { toggleDone, removeWithUndo } from './menus.js';
 import { h, toast } from './ui.js';
 
-const LONG_PRESS = 350, SLOP = 10, SWIPE = 72, EDGE_TOP = 90, EDGE_BOTTOM = 70;
+const LONG_PRESS = 350, SLOP = 10, SWIPE = 72, FLICK = 0.45, EDGE_TOP = 90, EDGE_BOTTOM = 70;   // FLICK: px per ms
 let g = null;          // the gesture in progress
 let swallow = false;   // eat the click that follows a mouse gesture
 
@@ -109,22 +109,37 @@ function startSwipe() {
   g.bg = h('div', { className: 'sw' });
   g.row.append(g.bg);
   g.row.classList.add('swiping');
+  g.slide = [...g.row.children].filter(el => el !== g.bg);   // moved directly, so only they restyle
+  g.trail = [];
 }
 
 function swipeTo(dx) {
   const l = state.lines.get(g.row.dataset.id), right = dx > 0;
   g.dx = dx;
-  g.row.style.setProperty('--dx', `${dx}px`);
+  g.trail.push([performance.now(), dx]);
+  if (g.trail.length > 6) g.trail.shift();
+  for (const el of g.slide) el.style.transform = `translateX(${dx}px)`;
   g.bg.className = `sw ${right ? 'r' : 'l'}${Math.abs(dx) > SWIPE ? ' go' : ''}`;
   g.bg.textContent = right ? (l?.done ? 'Not done' : 'Done') : 'Delete';
+}
+
+// A swipe acts when it goes far enough, or when it's a quick flick. Either way the finger has to be
+// moving outward as it lets go: pulling back cancels, as in iOS.
+function commits(s) {
+  const [t1, x1] = s.trail.at(-1) ?? [0, 0];
+  const [t0, x0] = s.trail.find(([t]) => t1 - t < 80) ?? [t1, x1];   // speed over the last 80 ms
+  const v = t1 > t0 ? (x1 - x0) / (t1 - t0) : 0, far = Math.abs(s.dx);
+  if (s.wheel) return far > SWIPE;
+  if (Math.sign(v) === -Math.sign(s.dx) && Math.abs(v) > 0.05) return false;
+  return far > SWIPE || (far > 24 && Math.abs(v) > FLICK);
 }
 
 function endSwipe(s, ok) {
   const l = state.lines.get(s.row.dataset.id);
   s.row.classList.add('settle');
-  s.row.style.setProperty('--dx', '0px');
+  for (const el of s.slide) el.style.transform = '';
   setTimeout(() => { s.row.classList.remove('swiping', 'settle'); s.bg.remove(); }, 200);
-  if (!ok || !l || Math.abs(s.dx) <= SWIPE) return;
+  if (!ok || !l || !commits(s)) return;
   if (s.dx > 0) toggleDone(l); else removeWithUndo(block(l));
 }
 
@@ -204,7 +219,8 @@ function endDrag(s, ok) {
   // line above, and at least the indent of a sub-list it lands inside.
   const prev = list[i - 1], next = list[i];
   const lo = prev && next && next.ind > 0 && prev.ind >= next.ind ? next.ind : 0, hi = prev ? prev.ind + 1 : 0;
-  tx(() => moveBlock(s.blk, c, i, Math.min(Math.max(s.blk[0].ind, lo), hi)));
+  const from = s.blk[0].c;
+  tx(() => { moveBlock(s.blk, c, i, Math.min(Math.max(s.blk[0].ind, lo), hi)); tidy(from); if (c !== from) tidy(c); });
   offerTime(s.blk[0].id, s.ids);
 }
 

@@ -137,6 +137,22 @@ export function segments(text, base = today()) {
   return out;
 }
 
+// The text of a line as drawn: link labels instead of links, no style markers.
+export const visibleText = text => segments(text).map(x => (x.k === 'f' ? '' : x.k === 'l' ? x.label : x.s)).join('');
+
+// Where q occurs in text, ignoring case and accents ("manana" finds "Mañana"): [start, end] index pairs.
+const fold = c => c.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+export function findAll(text, q) {
+  const needle = fold(q.trim());
+  if (!needle) return [];
+  let hay = '';
+  const from = [];   // from[i]: index in text of the i-th character of hay
+  for (let i = 0; i < text.length; i++) for (const ch of fold(text[i])) { hay += ch; from.push(i); }
+  const out = [];
+  for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + needle.length)) out.push([from[at], from[at + needle.length - 1] + 1]);
+  return out;
+}
+
 // The styles in effect at a position in the line: { f: like "bi", hl: a color or undefined }.
 export function stylesAt(text, pos) {
   let r = 0;

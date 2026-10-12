@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { startSync } from './sync.js';
 import { backupIfDue } from './backup.js';
 import { today } from './parse.js';
-import { main, ui, render, go, scrollToNow, scrollToDate } from './view.js';
+import { main, ui, render, go, search, setFinding, scrollToNow, scrollToDate } from './view.js';
 import { editAt, appendLine, undoLast } from './edit.js';
 import { consumeClick } from './gestures.js';
 import { mainMenu, dayMenu, laterMenu, tplMenu, archive, restore, newTemplate, importSheet, importTemplatesSheet, setAccount } from './menus.js';
@@ -49,7 +49,32 @@ async function connectAccount(config, emulator) {
 $('menu').onclick = mainMenu;
 $('fold').onclick = foldAll;
 $('back').onclick = () => go('plan');
-$('q').oninput = e => { ui.query = e.target.value; render(); };
+$('find').onclick = () => setFinding(true);
+$('q-done').onclick = () => { setFinding(false); scrollToNow(); };
+$('q').oninput = e => { search(e.target.value); if (ui.finding) scrollTo(0, 0); };
+$('q').onkeydown = e => { if (e.key === 'Escape' && ui.finding) $('q-done').click(); };
+
+// A search result: close the search and show the line in its place, opening whatever hides it.
+// Archived lines open the Archive with the same search.
+function jumpTo(id) {
+  const l = state.lines.get(id), day = state.days.get(l.c);
+  if (day?.arch) return go('arch', ui.query);
+  setFinding(false);
+  if (day?.fold) update(state.days, day.id, { fold: false });
+  if (l.c === store.LATER && state.prefs.laterFold) setPref('laterFold', false);
+  const list = store.linesOf(l.c);
+  for (let i = list.findIndex(x => x.id === id), ind = l.ind; i-- > 0 && ind > 0;) {
+    if (list[i].ind < ind) { ind = list[i].ind; if (list[i].fold) update(state.lines, list[i].id, { fold: false }); }
+  }
+  if (l.done && state.prefs.hideDone) setPref('hideDone', false);
+  render();
+  const row = main.querySelector(`.ls > .ln[data-id="${id}"]`);
+  if (!row) return;
+  row.scrollIntoView({ block: 'center' });
+  row.classList.remove('flash');
+  requestAnimationFrame(() => row.classList.add('flash'));
+  setTimeout(() => row.classList.remove('flash'), 1600);
+}
 
 // Collapses every day (and Later) on the screen, or expands them all, as one undoable step.
 function foldAll() {
@@ -89,14 +114,16 @@ main.addEventListener('click', e => {
   if (act === 'sec-menu') return openMenu(kind, c);
   if (act === 'archive') return archive(state.days.get(c));
   if (act === 'restore') return restore(state.days.get(c));
+  if (ui.finding && ui.query.trim()) { const row = e.target.closest('.ln'); return row && jumpTo(row.dataset.id); }
   if (sec.classList.contains('ro') || e.target.closest('a')) return;
   if (act === 'append') return appendLine(c);
   const row = e.target.closest('.ln');
   if (row && !row.classList.contains('ed')) editAt(row, e.clientX, e.clientY);
 });
 
-// ⌘Z outside a line (inside one, edit.js handles it).
+// ⌘F opens the planner's search; ⌘Z outside a line undoes (inside one, edit.js handles it).
 document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && ui.screen === 'plan') { e.preventDefault(); return setFinding(true); }
   if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
   if (e.target.closest?.('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
   e.preventDefault();

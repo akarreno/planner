@@ -172,6 +172,7 @@ export function load() {
   for (const t of data.tpls) state.tpls.set(t.id, t);
   for (const l of data.lines) { state.lines.set(l.id, l); reindex(l); }
   for (const l of state.lines.values()) if ('hl' in l) set(state.lines, fromLineHighlight(l));
+  tidyAll();
   if (data.v === 2) {   // version 1 had other defaults: keep the new ones
     state.prefs = { ...state.prefs, ...data.prefs };
     state.sync = { ...data.sync, dirty: new Map(data.sync.dirty) };
@@ -229,6 +230,21 @@ export function moveBlock(blk, c, i, ind = blk[0].ind) {
 }
 
 export const removeLines = lines => lines.forEach(l => remove(state.lines, l.id));
+
+// Blank lines: at most one in a row, and none at the start or end of a day, Later or a template.
+// keep: a line that's being typed in, never removed. Blank lines with sub-items stay.
+export function tidy(c, keep) {
+  const list = linesOf(c), drop = new Set();
+  const blank = (l, i) => l.id !== keep && !l.text.trim() && !(list[i + 1]?.ind > l.ind);
+  let prevBlank = true;   // so blanks at the start go
+  list.forEach((l, i) => {
+    if (blank(l, i) && prevBlank) drop.add(l.id);
+    else prevBlank = blank(l, i);
+  });
+  for (let i = list.length - 1; i >= 0 && (drop.has(list[i].id) || blank(list[i], i)); i--) drop.add(list[i].id);
+  for (const id of drop) remove(state.lines, id);
+}
+export const tidyAll = () => [...byContainer.keys()].forEach(c => tidy(c));
 export function removeDay(day) { removeLines(linesOf(day.id)); remove(state.days, day.id); }
 
 // plan: [{ date, tpl }], where tpl is a template id, or null for a blank day.
@@ -245,6 +261,7 @@ export function replacePlanner({ days, later }) {
   removeLines(linesOf(LATER));
   for (const d of days) { const day = ensureDay(d.date); insert(day.id, linesOf(day.id).length, d.lines); }
   insert(LATER, 0, later);
+  tidyAll();
 }
 
 // Adds imported content to the planner: each day's lines go at the end of that day (created if needed),
@@ -257,6 +274,7 @@ export function addToPlanner({ days, later }) {
   };
   for (const d of days) append(ensureDay(d.date).id, d.lines);
   append(LATER, later);
+  for (const c of [...days.map(d => dayOn(d.date).id), LATER]) tidy(c);
 }
 
 // Imported templates ([{ name, lines }]) replace templates with the same name; the others stay.
