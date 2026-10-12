@@ -6,8 +6,8 @@ import { h, icon } from './ui.js';
 
 export const main = document.getElementById('main');
 // finding: the planner's search bar is open; query: what's typed there (or in the archive's search);
-// editing: id of the line being typed in.
-export const ui = { screen: 'plan', query: '', finding: false, editing: null };
+// editing: id of the line being typed in; sel: ids of the selected lines in select mode, else null.
+export const ui = { screen: 'plan', query: '', finding: false, editing: null, sel: null };
 const $ = id => document.getElementById(id);
 const TITLES = { tpl: 'Templates', arch: 'Archive' };
 const sections = new Map();   // key → <section>
@@ -15,6 +15,7 @@ const extras = {};            // non-section elements, created once
 
 // The planner has no top bar; Templates and Archive get one with a back button.
 export function go(screen, query = '') {
+  ui.sel = null;
   ui.screen = screen;
   ui.finding = false;
   const sub = screen !== 'plan';
@@ -28,6 +29,7 @@ export function go(screen, query = '') {
 
 // The search bar: always on the Archive screen, opened with the search button on the planner.
 export function setFinding(on) {
+  ui.sel = null;
   ui.finding = on;
   search('');
   if (on) $('q').focus();
@@ -75,6 +77,8 @@ export function render() {
   const keep = new Set(want);
   for (const [k, el] of sections) if (!keep.has(el)) sections.delete(k);
   place(main, want);
+  document.body.classList.toggle('selecting', !!ui.sel);
+  $('selbar').hidden = !ui.sel;
   syncFold(list);
   showHits();
 }
@@ -297,6 +301,7 @@ function paintRow(row, { l, kids }, now, mirror) {
   cl.toggle('par', kids > 0);
   cl.toggle('folded', kids > 0 && l.fold);
   cl.toggle('nowb', isNow);
+  cl.toggle('sel', !!ui.sel?.has(l.id));
   if (isNow) row.dataset.now = now.label; else if (row.dataset.now) delete row.dataset.now;
   if (row.ind !== l.ind) { row.ind = l.ind; row.style.setProperty('--i', l.ind); }
   // The line being edited shows its raw text; everything else is redrawn only when its text changed.

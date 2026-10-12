@@ -87,12 +87,13 @@ const t0 = Date.now();
 const arrived = await until(async () => (await mac.locator('.ln', { hasText: 'Brush Teeth and floss' }).count()) > 0);
 log('edit phone → mac:', arrived, `${Date.now() - t0} ms`);
 
-// Delete on the Mac → gone on the phone.
+// Delete on the Mac (swipe left, then Delete) → gone on the phone.
 const target = mac.locator('section.day .ls > .ln', { hasText: 'Pay Rent' }).first();
 const box = await target.boundingBox();
 await mac.mouse.move(box.x + 40, box.y + box.height / 2); await mac.mouse.down();
 for (let dx = 10; dx <= 160; dx += 15) await mac.mouse.move(box.x + 40 - dx, box.y + box.height / 2);
 await mac.mouse.up();
+await target.locator('[data-sw="delete"]').click();
 const t1 = Date.now();
 const gone = await until(async () => (await phone.locator('.ln', { hasText: 'Pay Rent' }).count()) === 0);
 log('delete mac → phone:', gone, `${Date.now() - t1} ms`);

@@ -1,16 +1,18 @@
 // Sheets and undoable actions: menus, Fill days, Move to, import, copy, and the sync account.
 import {
-  state, LATER, tx, tidy, canUndo, restoreCopy, update, add, remove, uid, setPref, linesOf, block, moveBlock, removeLines, removeDay,
+  state, LATER, tx, tidy, canUndo, canRedo, restoreCopy, update, add, remove, uid, setPref, linesOf, moveBlock, moveLines, removeLines, removeDay,
   fillDays, replacePlanner, addToPlanner, importTemplateList, activeDays, archivedDays, templates, dayOn, ensureDay,
 } from './store.js';
 import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText, safeUrl } from './parse.js';
 import { go, scrollToDate } from './view.js';
-import { undoLast } from './edit.js';
+import { undoLast, redoLast } from './edit.js';
+import { startSelect } from './select.js';
 import { unpack } from './backup.js';
 import { h, sheet, choose, closeSheet, toast, pasteWithLinks } from './ui.js';
 
 const undoable = (message, fn) => toast(message, tx(fn));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const moved = lines => (lines.length === 1 ? 'Moved' : `Moved ${lines.length} lines`);
 
 // ---- Lines ----
 
@@ -19,21 +21,56 @@ export function toggleDone(line) {
   if (state.prefs.hideDone && !line.done) toast('Marked done', undo);
 }
 
-export const removeWithUndo = blk => undoable(blk.length > 1 ? `Deleted ${plural(blk.length, 'line')}` : 'Deleted line', () => { removeLines(blk); tidy(blk[0].c); });
+export const removeWithUndo = lines => undoable(lines.length > 1 ? `Deleted ${plural(lines.length, 'line')}` : 'Deleted line', () => {
+  removeLines(lines);
+  new Set(lines.map(l => l.c)).forEach(c => tidy(c));
+});
 
-export function moveSheet(line) {
-  const t = today(), blk = block(line);
-  const to = (target, label) => undoable(`Moved to ${label}`, () => {
-    const c = target === LATER ? LATER : ensureDay(target).id, from = line.c;
-    moveBlock(blk, c, linesOf(c).length, 0);
-    tidy(from);
+// Marks lines done, or not done when they all are already, as one undoable step.
+export function setDone(lines) {
+  const done = !lines.every(l => l.done);
+  undoable(`Marked ${plural(lines.length, 'line')} ${done ? 'done' : 'not done'}`, () => lines.forEach(l => update(state.lines, l.id, { done })));
+}
+
+// The next day for a line: the day after its own (today, for a line on a past day), or tomorrow
+// for a Later line. Template lines have none.
+function nextDay(l) {
+  const t = today(), day = state.days.get(l.c);
+  if (day) { const d = addDays(day.date, 1); return d < t ? t : d; }
+  return l.c === LATER ? addDays(t, 1) : null;
+}
+const dayName = d => (d === today() ? 'Today' : d === addDays(today(), 1) ? 'Tomorrow' : dayTitle(d));
+
+// How the next-day action reads for these lines ({ label, hint, date }), or null if some line has no next day.
+export function nextAction(lines) {
+  const dates = new Set(lines.map(nextDay));
+  if (!dates.size || dates.has(null)) return null;
+  if (dates.size > 1) return { label: 'Next day', hint: '', date: null };
+  const [d] = dates;
+  return { label: d === today() || d === addDays(today(), 1) ? dayName(d) : 'Next day', hint: shortDay(d), date: d };
+}
+
+// Moves each line to its next day, placed by its time, as one undoable step.
+export function moveNext(lines) {
+  const byDate = Map.groupBy(lines, nextDay);
+  undoable(`${moved(lines)} to ${byDate.size > 1 ? 'the next day' : dayName([...byDate.keys()][0])}`, () => {
+    for (const [date, group] of byDate) moveLines(group, ensureDay(date).id);
   });
-  const dates = [...new Set([t, addDays(t, 1), ...activeDays().map(d => d.date).filter(d => d >= t)])].sort();
-  const here = state.days.get(line.c)?.date;
+}
+
+// Move to: the next day as the big button, then today and the planned days ahead, Later, or any date.
+// Timed lines land in time order. done runs once the lines have moved.
+export function moveSheet(lines, done = () => {}) {
+  const t = today(), next = nextAction(lines), from = new Set(lines.map(l => l.c));
+  const here = from.size === 1 ? [...from][0] : null, hereDate = state.days.get(here)?.date;
+  const to = (target, label) => { done(); undoable(`${moved(lines)} to ${label}`, () => moveLines(lines, target === LATER ? LATER : ensureDay(target).id)); };
+  const dates = [...new Set([t, addDays(t, 1), ...activeDays().map(d => d.date).filter(d => d >= t)])].sort()
+    .filter(d => d !== hereDate && d !== next?.date);
   const other = h('input', { type: 'date', id: 'move-date', 'aria-label': 'Another date', onchange: e => { if (e.target.value) { closeSheet(); to(e.target.value, dayTitle(e.target.value)); } } });
   choose('Move to', [
-    ...dates.filter(d => d !== here).map(d => ({ label: d === t ? 'Today' : d === addDays(t, 1) ? 'Tomorrow' : shortDay(d), hint: d === t || d === addDays(t, 1) ? shortDay(d) : '', run: () => to(d, dayTitle(d)) })),
-    line.c !== LATER && { label: 'Later', run: () => to(LATER, 'Later') },
+    next && { label: next.label, hint: next.hint, primary: true, run: () => { done(); moveNext(lines); } },
+    ...dates.map(d => ({ label: d === t ? 'Today' : d === addDays(t, 1) ? 'Tomorrow' : shortDay(d), hint: d === t || d === addDays(t, 1) ? shortDay(d) : '', run: () => to(d, dayName(d)) })),
+    here !== LATER && { label: 'Later', run: () => to(LATER, 'Later') },
   ], h('label', { className: 'field' }, 'Another date', other));
 }
 
@@ -235,6 +272,8 @@ function restoreSheet(api, date) {
 
 export const mainMenu = () => choose('Planner', [
   canUndo() && { label: 'Undo last change', run: undoLast },
+  canRedo() && { label: 'Redo', run: redoLast },
+  { label: 'Select lines', run: startSelect },
   { label: 'Fill days…', run: fillSheet },
   { label: 'Templates', hint: String(templates().length), run: () => go('tpl') },
   { label: 'Archive', hint: String(archivedDays().length), run: () => go('arch') },

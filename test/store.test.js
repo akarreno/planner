@@ -83,3 +83,47 @@ test('tidy keeps at most one blank line in a row and none at the ends, sparing t
   s.tidy('f');
   assert.equal(texts('f'), 'A||>child|B');           // a blank line with sub-items stays
 });
+
+test('redo brings back what undo took, until a new change', async () => {
+  const s = await import('../js/store.js?redo');
+  let id;
+  s.tx(() => { id = s.insert(s.LATER, 0, [{ text: 'a', ind: 0 }])[0].id; });
+  s.tx(() => s.update(s.state.lines, id, { text: 'b' }));
+  s.tx(() => s.update(s.state.lines, id, { text: 'c' }));
+  assert.equal(s.redo(), false);
+  s.undo(); s.undo();
+  assert.equal(s.state.lines.get(id).text, 'a');
+  assert.equal(s.redo(), true);
+  assert.equal(s.state.lines.get(id).text, 'b');
+  assert.equal(s.undo(), true);            // a redo can be undone again
+  assert.equal(s.state.lines.get(id).text, 'a');
+  s.redo(); s.redo();
+  assert.equal(s.state.lines.get(id).text, 'c');
+  s.undo();
+  s.tx(() => s.update(s.state.lines, id, { text: 'd' }));
+  assert.equal(s.canRedo(), false, 'a new change clears redo');
+  s.undo(); s.undo(); s.undo();
+  assert.equal(s.state.lines.get(id), undefined);
+  s.redo();
+  assert.equal(s.state.lines.get(id).text, 'a', 'redo brings a removed line back');
+});
+
+test('moving lines to a day puts timed ones in time order and keeps sub-items with their line', async () => {
+  const s = await import('../js/store.js?move');
+  const texts = c => s.linesOf(c).map(l => '-'.repeat(l.ind) + l.text);
+  const mon = s.ensureDay('2026-10-12'), tue = s.ensureDay('2026-10-13');
+  s.insert(mon.id, 0, [
+    { text: '08:00 Gym', ind: 0 }, { text: 'Shoes', ind: 1 }, { text: 'Call bank', ind: 0 },
+    { text: 'Errands:', ind: 0 }, { text: 'Stamps', ind: 1 }, { text: 'Milk', ind: 1 },
+  ]);
+  s.insert(tue.id, 0, [{ text: '07:00 Wake', ind: 0 }, { text: '12:00 Lunch', ind: 0 }, { text: '< 01:00 Sleep', ind: 0 }]);
+  const [gym, shoes, bank, , , milk] = s.linesOf(mon.id);
+  s.moveLines([gym, shoes, bank, milk], tue.id);
+  assert.deepEqual(texts(tue.id), ['07:00 Wake', '08:00 Gym', '-Shoes', '12:00 Lunch', '< 01:00 Sleep', 'Call bank', 'Milk']);
+  assert.deepEqual(texts(mon.id), ['Errands:', '-Stamps']);
+
+  // Dropping lines from different places in one spot: each run starts at the drop's indent.
+  const [wake] = s.linesOf(tue.id), [, stamps] = s.linesOf(mon.id);
+  s.moveBlock([stamps, wake], s.LATER, 0, 0);
+  assert.deepEqual(texts(s.LATER), ['Stamps', '07:00 Wake']);
+});

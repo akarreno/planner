@@ -9,18 +9,23 @@ It installs to the Home Screen from Safari, works offline, and syncs through Fir
 Search (the magnifier button, or ⌘F) finds words across the week, Later and the Archive, ignoring case and
 accents; tap a result to jump to it. Blank lines are kept tidy: at most one in a row, none at the end of a day.
 
+Moving lines: swipe left for Tomorrow and Delete (a long swipe deletes at once); Move to… offers the next day
+first; long-press and let go to select several lines (or ⌘-click, Shift-click), then move, mark done, delete,
+or drag them together. Lines moved to a day land in time order. Undo and redo cover the last 20 changes.
+
 No framework and no build step: plain ES modules, plus a trimmed Firebase bundle in `vendor/`.
 
 | File | What it does |
 |---|---|
 | `js/parse.js` | Pure text logic: reading a line, pasted text, a whole note, templates; exporting back to text |
-| `js/store.js` | Days, lines and templates in memory; undo history of the last 20 changes; blank-line tidy; saved to `localStorage` |
+| `js/store.js` | Days, lines and templates in memory; undo and redo of the last 20 changes; moves; blank-line tidy; saved to `localStorage` |
 | `js/sync.js` | Two-way sync: sends changed records in batches, applies other devices' changes live |
 | `js/backup.js` | Daily compressed backup of the whole planner, last 30 days kept; restore is one undoable step |
 | `js/firebase.js` | Firebase sign-in and Firestore storage, in the shape `sync.js` expects |
 | `js/view.js` | Draws the screen, touching only the rows that changed; search results and their highlights |
 | `js/edit.js` | Tap-to-edit, Notes-like keys (Return, Backspace, Tab, ⌘B/I/U), paste, toolbar above the keyboard |
-| `js/gestures.js` | Swipe right = done, swipe left = delete (a long swipe or a quick flick; touch, trackpad or mouse), long-press = drag |
+| `js/gestures.js` | Swipe right = done, swipe left = Tomorrow and Delete buttons (touch, trackpad or mouse), long-press = drag or select |
+| `js/select.js` | Select mode: pick several lines, then move, mark done, delete or drag them together |
 | `js/menus.js` | Sheets: menu, Fill days, Move to, import, copy, sync account |
 | `js/app.js`, `js/main.js` | Startup and tap routing; `main.js` is the hosted entry |
 | `js/config.js` | The Firebase project's web settings (public by design) |

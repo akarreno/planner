@@ -36,6 +36,7 @@
 <div class="kb" id="kb" role="toolbar" aria-label="Line tools" hidden>
   <div class="kb-row" id="kb-tools">
     <button class="ib" data-kb="undo" data-icon="undo" aria-label="Undo"></button>
+    <button class="ib" data-kb="redo" data-icon="redo" aria-label="Redo"></button>
     <button class="ib" data-kb="outdent" data-icon="outdent" aria-label="Outdent"></button>
     <button class="ib" data-kb="indent" data-icon="indent" aria-label="Indent"></button>
     <button class="ib" data-kb="done" data-icon="check" aria-label="Mark done"></button>
@@ -57,6 +58,15 @@
     <button class="sw-c" data-hl="mint" aria-label="Mint highlight"></button>
     <button class="sw-c" data-hl="blue" aria-label="Blue highlight"></button>
     <button class="ib" data-kb="back" data-icon="back" aria-label="Back to line tools"></button>
+  </div>
+</div>
+<div class="selbar" id="selbar" role="toolbar" aria-label="Selected lines" hidden>
+  <div class="selbar-h"><span id="sel-count"></span><button class="done-btn" id="sel-cancel">Cancel</button></div>
+  <div class="selbar-row">
+    <button class="sb" data-sel="next" data-icon="next"><span>Tomorrow</span></button>
+    <button class="sb" data-sel="move" data-icon="move"><span>Move to…</span></button>
+    <button class="sb" data-sel="done" data-icon="check"><span>Done</span></button>
+    <button class="sb danger" data-sel="delete" data-icon="trash"><span>Delete</span></button>
   </div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>

@@ -1,6 +1,6 @@
 // Planner data: days, lines and templates, kept in memory and saved on this device.
 // Every change goes through set/remove, so it can be undone, redrawn and synced record by record.
-import { toggleStyle } from './parse.js';
+import { toggleStyle, clock, afterMidnight } from './parse.js';
 
 export const LATER = 'later';   // container id of the Later list
 export const state = {
@@ -60,11 +60,12 @@ export function changed() {
   queueMicrotask(() => { queued = false; listeners.forEach(fn => fn()); });
 }
 
-// ---- Undo ----
+// ---- Undo and redo ----
 
 // The last changes made on this device, newest last, each a list of [map, id, record before].
-// Changes from other devices are never recorded, and an undo is not itself recorded.
-const history = [];
+// Changes from other devices are never recorded. Undoing a step puts its reverse on the redo list,
+// and any new change clears that list.
+const history = [], future = [];
 const HISTORY = 20;
 let typing = null;   // the typing burst still growing: { id, step, at }
 
@@ -76,6 +77,7 @@ export function tx(fn) {
   if (!step.length) return () => {};
   history.push(step);
   if (history.length > HISTORY) history.shift();
+  future.length = 0;
   typing = null;
   return () => revert(step);
 }
@@ -91,18 +93,32 @@ export function typed(id, patch) {
   typing = { id, step: history.at(-1), at: now };
 }
 
+// Puts back the records a step changed, and returns the step that reverses that.
+function apply(step) {
+  const back = journal = [];
+  try { for (let k = step.length; k--;) { const [map, id, before] = step[k]; before ? set(map, before) : remove(map, id); } } finally { journal = null; }
+  typing = null;
+  return back;
+}
+
 function revert(step) {
   const i = history.indexOf(step);
   if (i < 0) return false;   // already undone
   history.splice(i, 1);
-  typing = null;
-  for (let k = step.length; k--;) { const [map, id, before] = step[k]; before ? set(map, before) : remove(map, id); }
+  future.push(apply(step));
+  if (future.length > HISTORY) future.shift();
   return true;
 }
 
-// Undoes the most recent change; false when there is nothing left to undo.
+// Undoes the most recent change, or redoes the most recently undone one; false when there's none.
 export const undo = () => history.length > 0 && revert(history.at(-1));
+export function redo() {
+  if (!future.length) return false;
+  history.push(apply(future.pop()));
+  return true;
+}
 export const canUndo = () => history.length > 0;
+export const canRedo = () => future.length > 0;
 
 // ---- Sync ----
 
@@ -223,10 +239,48 @@ export function insert(c, i, rows) {
   return rows.map((r, k) => add(state.lines, { id: uid(), c, pos: pos[k], text: r.text, ind: r.ind, done: false, fold: !!r.fold }));
 }
 
-// Moves a block to index i of container c (index counted without the block), with its first line at indent ind.
+// Splits lines (in planner order) into runs of lines that sit next to each other in their container.
+function runs(lines) {
+  const next = new Map(), out = [];
+  for (const c of new Set(lines.map(l => l.c))) linesOf(c).forEach((l, i, list) => next.set(l.id, list[i + 1]?.id));
+  lines.forEach((l, k) => (k && next.get(lines[k - 1].id) === l.id ? out.at(-1).push(l) : out.push([l])));
+  return out;
+}
+
+// Moves lines to index i of container c (index counted without them), together and in order. Each run
+// of lines that sat together starts at indent ind and keeps its sub-items' indents.
 export function moveBlock(blk, c, i, ind = blk[0].ind) {
-  const pos = slots(c, i, blk.length, new Set(blk.map(l => l.id))), shift = ind - blk[0].ind;
-  blk.forEach((l, k) => update(state.lines, l.id, { c, pos: pos[k], ind: Math.max(0, l.ind + shift) }));
+  const pos = slots(c, i, blk.length, new Set(blk.map(l => l.id)));
+  let k = 0;
+  for (const run of runs(blk)) {
+    const shift = ind - run[0].ind;
+    for (const l of run) update(state.lines, l.id, { c, pos: pos[k++], ind: Math.max(0, l.ind + shift) });
+  }
+}
+
+// Moves lines (in planner order) to another day, Later or a template as top-level lines. Each line goes
+// with the sub-items under it; on a day it goes before the first line timed later than it (if it has
+// a time), else at the end.
+export function moveLines(lines, c) {
+  lines = lines.map(l => state.lines.get(l.id)).filter(Boolean);   // as they are now
+  const from = new Set(lines.map(l => l.c)), units = [];   // a line and the deeper lines right after it
+  for (const run of runs(lines)) {
+    let head = null;
+    for (const l of run) if (head && l.ind > head.ind) units.at(-1).push(l); else { head = l; units.push([l]); }
+  }
+  for (const unit of units) {
+    const ids = new Set(unit.map(l => l.id)), list = linesOf(c).filter(l => !ids.has(l.id));
+    const t = state.days.has(c) ? clock(unit[0].text) : null;
+    let i = list.length;
+    if (t != null) {
+      let prev = null;
+      i = list.findIndex(l => { const m = l.ind ? null : afterMidnight(prev, clock(l.text)); if (m != null) prev = m; return m != null && m > t; });
+      if (i < 0) i = list.length;
+    }
+    moveBlock(unit, c, i, 0);
+  }
+  for (const x of from) tidy(x);
+  tidy(c);
 }
 
 export const removeLines = lines => lines.forEach(l => remove(state.lines, l.id));

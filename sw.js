@@ -5,7 +5,7 @@ const CACHE = 'planner';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/app.js', 'js/config.js', 'js/parse.js', 'js/store.js', 'js/sync.js', 'js/backup.js', 'js/firebase.js',
-  'js/view.js', 'js/edit.js', 'js/gestures.js', 'js/menus.js', 'js/ui.js',
+  'js/view.js', 'js/edit.js', 'js/gestures.js', 'js/select.js', 'js/menus.js', 'js/ui.js',
   'vendor/firebase.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
 ];
 

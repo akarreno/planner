@@ -1,18 +1,44 @@
-// Gestures on lines: swipe right to mark done, swipe left to delete,
-// long-press (or drag with a mouse) to move a line and its sub-items anywhere, including other days.
+// Gestures on lines: swipe right to mark done; swipe left to show Tomorrow and Delete, or swipe all the
+// way to delete; long-press (or drag with a mouse) to move a line and its sub-items anywhere, including
+// other days. A long press let go without moving selects the line (see select.js); dragging a selected
+// line moves all the selected lines.
 // Touch uses touch events rather than pointer events: iOS cancels pointer events when a long press
 // turns into a move, but lets a touchmove listener take over the move from scrolling.
 import { state, tx, update, block, linesOf, moveBlock, tidy } from './store.js';
 import { clock, fitTime, withTime, hhmm } from './parse.js';
-import { main } from './view.js';
-import { toggleDone, removeWithUndo } from './menus.js';
+import { main, ui } from './view.js';
+import { toggleDone, removeWithUndo, moveNext, nextAction } from './menus.js';
+import { pick, chosen, endSelect } from './select.js';
 import { h, toast } from './ui.js';
 
-const LONG_PRESS = 350, SLOP = 10, SWIPE = 72, FLICK = 0.45, EDGE_TOP = 90, EDGE_BOTTOM = 70;   // FLICK: px per ms
+// FLICK: px per ms. BUTTON: width of each button a left swipe shows.
+const LONG_PRESS = 350, SLOP = 10, SWIPE = 72, FLICK = 0.45, BUTTON = 80, EDGE_TOP = 90, EDGE_BOTTOM = 70;
 let g = null;          // the gesture in progress
-let swallow = false;   // eat the click that follows a mouse gesture
+let open = null;       // the line swiped open to show its buttons: { row, bg, slide }
+let swallow = false;   // eat the click that follows a gesture
 
 export const consumeClick = () => { const s = swallow; swallow = false; return s; };
+
+// A touch or click anywhere but on a line's open buttons closes them, and does nothing else.
+// (On that line itself, the gesture decides: a tap closes, a swipe moves them.)
+function closeOpen(e) {
+  swallow = false;
+  if (!open || open.bg.contains(e.target) || open.row.contains(e.target)) return;
+  shut();
+  swallow = true;
+}
+document.addEventListener('touchstart', closeOpen, { capture: true, passive: true });
+document.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') closeOpen(e); }, true);
+
+// The buttons on a line swiped open.
+main.addEventListener('click', e => {
+  const b = e.target.closest('[data-sw]');
+  if (!b) return;
+  e.stopPropagation();
+  const l = state.lines.get(b.closest('.ln').dataset.id);
+  shut();
+  if (l) (b.dataset.sw === 'delete' ? removeWithUndo : moveNext)(block(l));
+}, true);
 
 // The row a gesture can start on: not the line being edited, not read-only, not a button or link.
 function rowAt(target) {
@@ -22,7 +48,7 @@ function rowAt(target) {
 
 function begin(row, x, y, touch) {
   g = { row, x0: x, y0: y, x, y, mode: null, touch };
-  if (touch && !row.classList.contains('mir')) g.timer = setTimeout(startDrag, LONG_PRESS);
+  if (touch && !row.classList.contains('mir') && open?.row !== row) g.timer = setTimeout(startDrag, LONG_PRESS);
 }
 
 main.addEventListener('touchstart', e => {
@@ -62,15 +88,15 @@ let wheelEnd = 0, drift = 0;
 main.addEventListener('wheel', e => {
   const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY), now = performance.now();
   if (!g?.wheel) {
-    if (!sideways || g) return;
+    if (!sideways || g || ui.sel) return;
     if (now < drift) { drift = now + 200; return e.preventDefault(); }
     const row = rowAt(e.target);
     if (!row) return;
-    g = { row, x0: 0, y0: 0, x: 0, y: 0, mode: null, touch: false, wheel: true, dx: 0 };
+    g = { row, x0: 0, y0: 0, x: 0, y: 0, mode: null, touch: false, wheel: true, d: 0 };
     startSwipe();
   }
   e.preventDefault();   // no page scroll, and no Back/Forward navigation
-  swipeTo(g.dx - e.deltaX * (e.webkitDirectionInvertedFromDevice === false ? -1 : 1));
+  swipeTo(g.d -= e.deltaX * (e.webkitDirectionInvertedFromDevice === false ? -1 : 1));
   clearTimeout(wheelEnd);
   wheelEnd = setTimeout(() => { drift = performance.now() + 200; finish(true); }, 200);
 }, { passive: false });
@@ -86,73 +112,142 @@ function move(x, y) {
   if (!g.mode) {
     if (Math.hypot(dx, dy) < SLOP) return;
     clearTimeout(g.timer);
-    if (Math.abs(dx) > Math.abs(dy) * 1.2) startSwipe();
+    if (Math.abs(dx) > Math.abs(dy) * 1.2 && !ui.sel) startSwipe();   // no swiping in select mode
     else if (!g.touch && !g.row.classList.contains('mir')) startDrag();
-    else { g = null; return; }   // a vertical touch move before the long press is a scroll
+    else { if (open?.row === g.row) shut(); g = null; return; }   // a vertical touch move before the long press is a scroll
   }
-  if (g.mode === 'swipe') swipeTo(dx); else dragTo();
+  if (g.mode === 'swipe') swipeTo(dx);
+  else {
+    if (Math.hypot(x - g.liftX, y - g.liftY) > SLOP) g.shifted = true;
+    dragTo();
+  }
 }
 
 function finish(ok) {
   const s = g;
   g = null;
   clearTimeout(s.timer);
-  if (!s.mode) return;
+  if (!s.mode) {   // a tap on a line with its buttons open closes them
+    if (open?.row === s.row) { shut(); swallow = true; }
+    return;
+  }
   if (!s.touch) { swallow = true; setTimeout(() => { swallow = false; }, 60); }
   if (s.mode === 'swipe') endSwipe(s, ok); else endDrag(s, ok);
 }
 
 // ---- Swipe ----
 
+// Right slides the line over to mark it done. Left brings in the line's buttons, Tomorrow (the line's
+// next day) and Delete, over its right end (lines are short, so the text stays in view); they stay until
+// a tap, and a long swipe left deletes at once, as in Mail. Swiping an open line starts where it is.
 function startSwipe() {
   g.mode = 'swipe';
-  g.bg = h('div', { className: 'sw' });
-  g.row.append(g.bg);
+  const l = state.lines.get(g.row.dataset.id), again = open?.row === g.row ? open : null;
+  if (open && !again) shut();
+  open = null;
+  clearTimeout(g.row.settled);
   g.row.classList.add('swiping');
+  g.row.classList.remove('settle');
+  g.bg = again?.bg ?? g.row.appendChild(h('div', { className: 'sw' }));
   g.slide = [...g.row.children].filter(el => el !== g.bg);   // moved directly, so only they restyle
+  g.base = again ? again.base : 0;
   g.trail = [];
+  g.next = l && !g.row.classList.contains('mir') ? nextAction([l]) : null;   // From Later copies keep their date
+  g.reveal = BUTTON * (g.next ? 2 : 1);
+  g.full = Math.min(Math.max(g.reveal + 60, g.row.offsetWidth * 0.6), 280);   // a long swipe, short enough for a trackpad
 }
 
-function swipeTo(dx) {
-  const l = state.lines.get(g.row.dataset.id), right = dx > 0;
-  g.dx = dx;
-  g.trail.push([performance.now(), dx]);
+// d: how far the finger (or trackpad) has moved sideways since the swipe started.
+function swipeTo(d) {
+  const x = g.base ? Math.min(0, g.base + d) : d;   // an open line only closes to the right
+  g.dx = x;
+  g.trail.push([performance.now(), x]);
   if (g.trail.length > 6) g.trail.shift();
-  for (const el of g.slide) el.style.transform = `translateX(${dx}px)`;
-  g.bg.className = `sw ${right ? 'r' : 'l'}${Math.abs(dx) > SWIPE ? ' go' : ''}`;
-  g.bg.textContent = right ? (l?.done ? 'Not done' : 'Done') : 'Delete';
+  for (const el of g.slide) el.style.transform = x > 0 ? `translateX(${x}px)` : '';
+  paintSwipe(g, x);
 }
 
-// A swipe acts when it goes far enough, or when it's a quick flick. Either way the finger has to be
-// moving outward as it lets go: pulling back cancels, as in iOS.
-function commits(s) {
+// The strip beside the line: Done (green once far enough), or the buttons (all Delete past a long swipe).
+function paintSwipe(s, x) {
+  const side = x > 0 ? 'r' : 'l';
+  if (s.bg.dataset.side !== side) {
+    s.bg.dataset.side = side;
+    s.bg.replaceChildren(...(side === 'r' ? [h('span', {}, state.lines.get(s.row.dataset.id)?.done ? 'Not done' : 'Done')] : [
+      s.next && h('button', { className: 'sa next', 'data-sw': 'next' }, s.next.label),
+      h('button', { className: 'sa del', 'data-sw': 'delete' }, 'Delete'),
+    ].filter(Boolean)));
+  }
+  s.bg.className = `sw ${side}${(side === 'r' ? x > SWIPE : -x > s.full) ? ' go' : ''}`;
+  s.bg.style.width = `${Math.abs(x)}px`;
+}
+
+// Finger speed over the last 80 ms, in px per ms (negative is leftward).
+function speed(s) {
   const [t1, x1] = s.trail.at(-1) ?? [0, 0];
-  const [t0, x0] = s.trail.find(([t]) => t1 - t < 80) ?? [t1, x1];   // speed over the last 80 ms
-  const v = t1 > t0 ? (x1 - x0) / (t1 - t0) : 0, far = Math.abs(s.dx);
-  if (s.wheel) return far > SWIPE;
-  if (Math.sign(v) === -Math.sign(s.dx) && Math.abs(v) > 0.05) return false;
-  return far > SWIPE || (far > 24 && Math.abs(v) > FLICK);
+  const [t0, x0] = s.trail.find(([t]) => t1 - t < 80) ?? [t1, x1];
+  return t1 > t0 ? (x1 - x0) / (t1 - t0) : 0;
+}
+
+// A right swipe acts when it goes far enough, or when it's a quick flick. Either way the finger has to
+// be moving outward as it lets go: pulling back cancels, as in iOS.
+function commits(s) {
+  const v = speed(s);
+  if (s.wheel) return s.dx > SWIPE;
+  if (v < -0.05) return false;
+  return s.dx > SWIPE || (s.dx > 24 && v > FLICK);
+}
+
+// Where a left swipe ends: past a long swipe it deletes; a flick left opens the buttons and a pull back
+// closes them; otherwise they stay open if more than half of them showed.
+function landing(s) {
+  if (-s.dx > s.full) return 'delete';
+  const v = s.wheel ? 0 : speed(s);
+  if (v < -FLICK && s.dx < -24) return 'open';
+  if (v > 0.05) return 'close';
+  return -s.dx > s.reveal / 2 ? 'open' : 'close';
 }
 
 function endSwipe(s, ok) {
-  const l = state.lines.get(s.row.dataset.id);
+  const l = state.lines.get(s.row.dataset.id), x = s.dx ?? 0;
+  const to = !ok || !l ? 'close' : x > 0 ? (commits(s) ? 'done' : 'close') : landing(s);
+  settle(s, to === 'open' ? -s.reveal : 0);
+  if (to === 'done') toggleDone(l);
+  else if (to === 'delete') removeWithUndo(block(l));
+}
+
+// Settles the line at x: 0 closes it, -reveal leaves its buttons open.
+function settle(s, x) {
   s.row.classList.add('settle');
   for (const el of s.slide) el.style.transform = '';
-  setTimeout(() => { s.row.classList.remove('swiping', 'settle'); s.bg.remove(); }, 200);
-  if (!ok || !l || !commits(s)) return;
-  if (s.dx > 0) toggleDone(l); else removeWithUndo(block(l));
+  s.bg.style.width = `${-x}px`;
+  if (x) {
+    s.bg.className = 'sw l';
+    open = { row: s.row, bg: s.bg, slide: s.slide, base: x };
+    return;
+  }
+  s.row.settled = setTimeout(() => { s.row.classList.remove('swiping', 'settle'); s.bg.remove(); }, 200);
+}
+
+function shut() {
+  const s = open;
+  open = null;
+  if (s) settle(s, 0);
 }
 
 // ---- Drag ----
 
+// In select mode the pressed line joins the selection, and all of it moves.
 function startDrag() {
   const l = state.lines.get(g.row.dataset.id);
   if (!l) return;
+  shut();
   g.mode = 'drag';
-  g.blk = block(l);
+  if (ui.sel) pick(l.id);
+  g.blk = ui.sel ? chosen() : block(l);
   g.ids = new Set(g.blk.map(x => x.id));
   const r = g.row.getBoundingClientRect();
   g.grab = g.y0 - r.top;
+  g.liftX = g.x;
   g.liftY = g.y;
   g.ghost = g.row.cloneNode(true);
   g.ghost.classList.add('ghost');
@@ -208,6 +303,7 @@ function endDrag(s, ok) {
   s.bar.remove();
   document.body.classList.remove('dragging');
   main.querySelectorAll('.lift').forEach(r => r.classList.remove('lift'));
+  if (ok && s.touch && !s.shifted) return pick(s.row.dataset.id);   // a long press let go in place selects
   if (!ok || !s.target) return;
   const { c, id, after } = s.target, list = linesOf(c).filter(l => !s.ids.has(l.id));
   let i = list.length;
@@ -219,9 +315,10 @@ function endDrag(s, ok) {
   // line above, and at least the indent of a sub-list it lands inside.
   const prev = list[i - 1], next = list[i];
   const lo = prev && next && next.ind > 0 && prev.ind >= next.ind ? next.ind : 0, hi = prev ? prev.ind + 1 : 0;
-  const from = s.blk[0].c;
-  tx(() => { moveBlock(s.blk, c, i, Math.min(Math.max(s.blk[0].ind, lo), hi)); tidy(from); if (c !== from) tidy(c); });
-  offerTime(s.blk[0].id, s.ids);
+  const selected = !!ui.sel;
+  tx(() => { moveBlock(s.blk, c, i, Math.min(Math.max(s.blk[0].ind, lo), hi)); for (const x of new Set([...s.blk.map(l => l.c), c])) tidy(x); });
+  if (selected) endSelect();
+  else offerTime(s.blk[0].id, s.ids);
 }
 
 // A dropped line whose time no longer fits between the nearest times above and below it gets a

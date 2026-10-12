@@ -1,6 +1,6 @@
 // Editing in place: tap a line to type into it, keys that behave like Notes,
 // and the toolbar that rides above the keyboard.
-import { state, tx, typed, undo, update, remove, insert, block, moveBlock, indexOf, linesOf, tidy } from './store.js';
+import { state, tx, typed, undo, redo, update, remove, insert, block, moveBlock, indexOf, linesOf, tidy } from './store.js';
 import { parseLines, segments, isUrl, linkText, linkAt, linkify, toggleStyle, stylesAt } from './parse.js';
 import { main, ui, render } from './view.js';
 import { moveSheet, toggleDone, linkSheet } from './menus.js';
@@ -53,14 +53,19 @@ function rawOffset(text, shown) {
   return text.length;
 }
 
-// Undoes the last change. While editing, the line shows its restored text, or editing ends if it's gone.
-export function undoLast() {
+// Undo and redo. While editing, the line shows its new text, or editing ends if the line is gone.
+// Outside a line, a message says what happened and offers the opposite.
+export const undoLast = () => undoRedo(undo, 'Nothing to undo.', 'Undid last change', 'Redo', redoLast);
+export const redoLast = () => undoRedo(redo, 'Nothing to redo.', 'Redid change', 'Undo', undoLast);
+
+function undoRedo(step, none, message, label, opposite) {
   const id = cur?.id, mirror = inMirror();
-  if (!undo()) return toast('Nothing to undo.');
+  if (!step()) return toast(none);
   render();
   const l = id && L.get(id);
   if (l) focusLine(id, l.text.length, mirror);
   else if (cur) cur.tx.blur();
+  else toast(message, opposite, label);
 }
 
 // Adds a line at the end of a container (or reuses a trailing blank one) and starts editing it.
@@ -275,7 +280,7 @@ main.addEventListener('keydown', e => {
   else if (mod && k.toLowerCase() === 'k') done = openLink();
   else if (mod && !e.shiftKey && 'biu'.includes(k.toLowerCase())) done = style(k.toLowerCase());
   else if (mod && e.shiftKey && k.toLowerCase() === 'x') done = style('s');
-  else if (mod && k.toLowerCase() === 'z') done = e.shiftKey || undoLast();   // redo isn't supported
+  else if (mod && k.toLowerCase() === 'z') done = e.shiftKey ? redoLast() : undoLast();
   else return;
   if (done !== false) e.preventDefault();
 });
@@ -286,7 +291,7 @@ main.addEventListener('beforeinput', e => {
   const [start, end] = caret(cur.tx);
   if (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak') { e.preventDefault(); enter(start, end); }
   else if (e.inputType === 'historyUndo') { e.preventDefault(); undoLast(); }   // iPhone shake or three-finger swipe
-  else if (e.inputType === 'historyRedo') e.preventDefault();
+  else if (e.inputType === 'historyRedo') { e.preventDefault(); redoLast(); }
   else if (e.inputType === 'deleteContentBackward' && start === 0 && end === 0 && backspace() !== false) e.preventDefault();
 });
 
@@ -353,9 +358,10 @@ bar.addEventListener('click', e => {
     done: toggle,
     up: () => moveBy(-1),
     down: () => moveBy(1),
-    move: () => { const l = line(); cur.tx.blur(); moveSheet(l); },
+    move: () => { const l = line(); cur.tx.blur(); moveSheet(block(l)); },
     link: openLink,
     undo: undoLast,
+    redo: redoLast,
     styles: () => showStyles(true),
     back: () => showStyles(false),
     close: () => cur.tx.blur(),

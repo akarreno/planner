@@ -30,6 +30,9 @@ const PATHS = {
   fold: 'M7 3.5l5 5 5-5M7 20.5l5-5 5 5',
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L20 20',
   unfold: 'M7 8.5l5-5 5 5M7 15.5l5 5 5-5',
+  redo: 'M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13',
+  next: 'M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 9.5h16M8.5 3v4M15.5 3v4M8.5 14.5h7M13 12l2.5 2.5L13 17',
+  trash: 'M4.5 7h15M10 11v5.5M14 11v5.5M6.5 7l.8 11.2A2 2 0 0 0 9.3 20h5.4a2 2 0 0 0 2-1.8L17.5 7M9.5 7V4.5h5V7',
   link: 'M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1',
   close: 'M6 6l12 12M18 6L6 18',
 };
@@ -55,9 +58,9 @@ export function sheet(title, ...body) {
 }
 export const closeSheet = () => dlg.close();
 
-// A sheet of actions: items are { label, run, danger?, checked?, hint? } or falsy (skipped).
+// A sheet of actions: items are { label, run, primary?, danger?, checked?, hint? } or falsy (skipped).
 export const choose = (title, items, ...extra) => sheet(title,
-  ...items.filter(Boolean).map(it => h('button', { className: 'act' + (it.danger ? ' danger' : ''), onclick: () => { closeSheet(); it.run(); } },
+  ...items.filter(Boolean).map(it => h('button', { className: it.primary ? 'primary' : 'act' + (it.danger ? ' danger' : ''), onclick: () => { closeSheet(); it.run(); } },
     h('span', {}, it.label), it.checked ? icon('check') : it.hint ? h('span', { className: 'hint' }, it.hint) : null)),
   ...extra);
 

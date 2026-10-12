@@ -4,8 +4,9 @@ import { startSync } from './sync.js';
 import { backupIfDue } from './backup.js';
 import { today } from './parse.js';
 import { main, ui, render, go, search, setFinding, scrollToNow, scrollToDate } from './view.js';
-import { editAt, appendLine, undoLast } from './edit.js';
+import { editAt, appendLine, undoLast, redoLast } from './edit.js';
 import { consumeClick } from './gestures.js';
+import { tap } from './select.js';
 import { mainMenu, dayMenu, laterMenu, tplMenu, archive, restore, newTemplate, importSheet, importTemplatesSheet, setAccount } from './menus.js';
 import { fillIcons } from './ui.js';
 
@@ -115,19 +116,25 @@ main.addEventListener('click', e => {
   if (act === 'archive') return archive(state.days.get(c));
   if (act === 'restore') return restore(state.days.get(c));
   if (ui.finding && ui.query.trim()) { const row = e.target.closest('.ln'); return row && jumpTo(row.dataset.id); }
+  const row = e.target.closest('.ln');
+  if (ui.sel) {   // select mode: a tap picks or unpicks a line, even on a link
+    e.preventDefault();
+    return row && !sec.classList.contains('ro') && tap(row, e);
+  }
   if (sec.classList.contains('ro') || e.target.closest('a')) return;
   if (act === 'append') return appendLine(c);
-  const row = e.target.closest('.ln');
-  if (row && !row.classList.contains('ed')) editAt(row, e.clientX, e.clientY);
+  if (!row || row.classList.contains('ed')) return;
+  if (e.metaKey || e.shiftKey) tap(row, e);   // ⌘-click or Shift-click starts selecting
+  else editAt(row, e.clientX, e.clientY);
 });
 
-// ⌘F opens the planner's search; ⌘Z outside a line undoes (inside one, edit.js handles it).
+// ⌘F opens the planner's search; ⌘Z and ⇧⌘Z outside a line undo and redo (inside one, edit.js handles them).
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && ui.screen === 'plan') { e.preventDefault(); return setFinding(true); }
-  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
   if (e.target.closest?.('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
   e.preventDefault();
-  undoLast();
+  if (e.shiftKey) redoLast(); else undoLast();
 });
 
 // Keep the "now" line and the Today label current. Save before the app goes to the background,
