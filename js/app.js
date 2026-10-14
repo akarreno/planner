@@ -63,10 +63,7 @@ function jumpTo(id) {
   setFinding(false);
   if (day?.fold) update(state.days, day.id, { fold: false });
   if (l.c === store.LATER && state.prefs.laterFold) setPref('laterFold', false);
-  const list = store.linesOf(l.c);
-  for (let i = list.findIndex(x => x.id === id), ind = l.ind; i-- > 0 && ind > 0;) {
-    if (list[i].ind < ind) { ind = list[i].ind; if (list[i].fold) update(state.lines, list[i].id, { fold: false }); }
-  }
+  store.reveal(id);
   if (l.done && state.prefs.hideDone) setPref('hideDone', false);
   render();
   const row = main.querySelector(`.ls > .ln[data-id="${id}"]`);

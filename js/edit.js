@@ -1,8 +1,8 @@
 // Editing in place: tap a line to type into it, keys that behave like Notes,
 // and the toolbar that rides above the keyboard.
-import { state, tx, typed, undo, redo, update, remove, insert, block, moveBlock, indexOf, linesOf, tidy } from './store.js';
+import { state, tx, typed, undo, redo, reveal, update, remove, insert, block, moveBlock, indexOf, linesOf, tidy } from './store.js';
 import { parseLines, segments, isUrl, linkText, linkAt, linkify, toggleStyle, stylesAt } from './parse.js';
-import { main, ui, render } from './view.js';
+import { main, ui, render, counts } from './view.js';
 import { moveSheet, toggleDone, linkSheet } from './menus.js';
 import { anchorsIn, toast } from './ui.js';
 
@@ -78,10 +78,11 @@ export function appendLine(c) {
 
 // Runs an edit as one step, redraws at once and puts the caret back, all within the same
 // keypress or tap. Staying inside that event is what keeps the iPhone keyboard up.
+// A line that ends up inside a folded one opens it, so it doesn't vanish while being typed in.
 function act(fn, id, offset) {
   const mirror = inMirror();
-  tx(fn);
-  const target = typeof id === 'function' ? id() : id;
+  let target;
+  tx(() => { fn(); target = typeof id === 'function' ? id() : id; if (target) reveal(target); });
   if (target) ui.editing = target;   // so a new blank line is drawn, not hidden as an extra blank
   render();
   if (target) focusLine(target, offset, mirror);
@@ -154,10 +155,12 @@ function enter(start, end) {
   const l = line(), text = cur.tx.textContent, before = text.slice(0, start), after = text.slice(end);
   if (!text && l.ind) return act(() => update(L, l.id, { ind: l.ind - 1 }), l.id, 0);   // Enter on an empty sub-item steps it out
   if (!before && after && start === end) return act(() => insert(l.c, indexOf(l), [{ text: '', ind: l.ind }]), l.id, 0);   // at the start: open a line above
+  // The new line goes after the sub-items when they're folded or all hidden (done), so they stay with this line.
+  const blk = block(l), after1 = l.fold || !blk.slice(1).some(counts) ? blk.length : 1;
   let id;
   act(() => {
     update(L, l.id, { text: before });
-    id = insert(l.c, indexOf(l) + (l.fold ? block(l).length : 1), [{ text: after, ind: l.ind }])[0].id;
+    id = insert(l.c, indexOf(l) + after1, [{ text: after, ind: l.ind }])[0].id;
   }, () => id, 0);
 }
 
@@ -303,6 +306,7 @@ main.addEventListener('input', e => {
   if (!l.ind && /^[-*•] /.test(text) && caret(cur.tx)[0] === 2) {   // typing "- " starts a sub-item, like Notes
     cur.tx.textContent = text = text.slice(2);
     typed(l.id, { text, ind: 1 });
+    reveal(l.id);   // inside a folded line: open it
     return setCaret(cur.tx, 0);
   }
   typed(l.id, { text });

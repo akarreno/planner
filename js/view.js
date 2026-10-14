@@ -137,12 +137,13 @@ function place(box, want) {
 // ---- What each screen shows ----
 
 const hidden = l => state.prefs.hideDone && l.done;
-export const counts = l => !!l.text.trim() && !hidden(l);   // a line that shows and has something in it
+export const counts = l => (!!l.text.trim() || l.id === ui.editing) && !hidden(l);   // a line that shows and has something in it
 // How many lines the screen shows among these (at least 1): hidden done sub-items go along uncounted.
 export const shownCount = lines => Math.max(1, lines.filter(counts).length);
 
 // Visible lines of a container: skips lines inside folded parents and, if chosen, done lines.
 // kids: how many lines inside a line would show when it's open (so done ones don't count while hidden).
+// Folding hides only when something inside would show; otherwise there'd be no way to open it.
 function outline(list) {
   const out = [];
   let hideBelow = -1;
@@ -151,7 +152,7 @@ function outline(list) {
     if (hideBelow >= 0) { if (l.ind > hideBelow) continue; hideBelow = -1; }
     let end = i + 1, kids = 0;
     for (; end < list.length && list[end].ind > l.ind; end++) if (counts(list[end])) kids++;
-    if (l.fold && end > i + 1) hideBelow = l.ind;
+    if (l.fold && kids) hideBelow = l.ind;
     if (!hidden(l)) out.push({ l, kids });
   }
   // Hidden lines can leave blank lines that separate nothing: show at most one in a row, none at the

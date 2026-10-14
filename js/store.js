@@ -285,6 +285,16 @@ export function moveLines(lines, c) {
 
 export const removeLines = lines => lines.forEach(l => remove(state.lines, l.id));
 
+// Opens the folded lines that a line sits inside, so it shows.
+export function reveal(id) {
+  const l = state.lines.get(id);
+  if (!l) return;
+  const list = linesOf(l.c);
+  for (let i = list.findIndex(x => x.id === id), ind = l.ind; i-- > 0 && ind > 0;) {
+    if (list[i].ind < ind) { ind = list[i].ind; if (list[i].fold) update(state.lines, list[i].id, { fold: false }); }
+  }
+}
+
 // Blank lines: at most one in a row, and none at the start or end of a day, Later or a template.
 // keep: a line that's being typed in, never removed. Blank lines with sub-items stay.
 export function tidy(c, keep) {
