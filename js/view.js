@@ -136,27 +136,32 @@ function place(box, want) {
 
 // ---- What each screen shows ----
 
+const hidden = l => state.prefs.hideDone && l.done;
+const counts = l => !!l.text.trim() && !hidden(l);   // a line that shows and has something in it
+
 // Visible lines of a container: skips lines inside folded parents and, if chosen, done lines.
+// kids: how many lines inside a line would show when it's open (so done ones don't count while hidden).
 function outline(list) {
   const out = [];
   let hideBelow = -1;
   for (let i = 0; i < list.length; i++) {
     const l = list[i];
     if (hideBelow >= 0) { if (l.ind > hideBelow) continue; hideBelow = -1; }
-    let kids = 0;
-    while (i + kids + 1 < list.length && list[i + kids + 1].ind > l.ind) kids++;
-    if (l.fold && kids) hideBelow = l.ind;
-    if (!(state.prefs.hideDone && l.done)) out.push({ l, kids });
+    let end = i + 1, kids = 0;
+    for (; end < list.length && list[end].ind > l.ind; end++) if (counts(list[end])) kids++;
+    if (l.fold && end > i + 1) hideBelow = l.ind;
+    if (!hidden(l)) out.push({ l, kids });
   }
-  // Hidden lines can leave blank lines next to each other: show at most one in a row, none at the ends.
+  // Hidden lines can leave blank lines that separate nothing: show at most one in a row, none at the
+  // ends, and none at the start or end of a list of sub-items.
   const blank = e => !e.kids && !e.l.text.trim() && e.l.id !== ui.editing;
   const shown = [];
   for (const e of out) if (!(blank(e) && (!shown.length || blank(shown.at(-1))))) shown.push(e);
   while (shown.length && blank(shown.at(-1))) shown.pop();
-  return shown;
+  return shown.filter((e, k) => !(blank(e) && e.l.ind > 0 && (shown[k - 1].l.ind < e.l.ind || !(shown[k + 1]?.l.ind >= e.l.ind))));
 }
 
-const countOf = c => linesOf(c).filter(l => l.text.trim()).length;
+const countOf = c => linesOf(c).filter(counts).length;
 
 // The "now" line sits just above the next timed line. Early-morning times after late ones
 // (like "< 01:00 Sleep" after dinner) count as after midnight.
