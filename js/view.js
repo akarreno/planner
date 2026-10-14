@@ -137,7 +137,9 @@ function place(box, want) {
 // ---- What each screen shows ----
 
 const hidden = l => state.prefs.hideDone && l.done;
-const counts = l => !!l.text.trim() && !hidden(l);   // a line that shows and has something in it
+export const counts = l => !!l.text.trim() && !hidden(l);   // a line that shows and has something in it
+// How many lines the screen shows among these (at least 1): hidden done sub-items go along uncounted.
+export const shownCount = lines => Math.max(1, lines.filter(counts).length);
 
 // Visible lines of a container: skips lines inside folded parents and, if chosen, done lines.
 // kids: how many lines inside a line would show when it's open (so done ones don't count while hidden).

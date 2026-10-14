@@ -2,7 +2,7 @@
 // delete them, or drag them all at once. A long press let go without moving starts it, as do ⌘-click
 // and Shift-click with a mouse, and Select lines in the menu.
 import { state, LATER, block, activeDays, templates } from './store.js';
-import { main, ui, render } from './view.js';
+import { main, ui, render, shownCount } from './view.js';
 import { moveSheet, moveNext, nextAction, setDone, removeWithUndo } from './menus.js';
 
 const $ = id => document.getElementById(id);
@@ -63,7 +63,8 @@ export function chosen() {
 
 function sync() {
   const lines = chosen(), n = lines.length, next = n ? nextAction(lines) : null;
-  $('sel-count').textContent = n ? `${n} line${n === 1 ? '' : 's'} selected` : 'Tap lines to select them';
+  const shown = shownCount(lines);
+  $('sel-count').textContent = n ? `${shown} line${shown === 1 ? '' : 's'} selected` : 'Tap lines to select them';
   for (const b of bar.querySelectorAll('[data-sel]')) b.disabled = !n;
   const nextBtn = bar.querySelector('[data-sel="next"]');
   nextBtn.disabled = !next;

@@ -4,7 +4,7 @@ import {
   fillDays, replacePlanner, addToPlanner, importTemplateList, activeDays, archivedDays, templates, dayOn, ensureDay,
 } from './store.js';
 import { dayTitle, shortDay, today, addDays, weekday, importNote, importTemplates, exportText, safeUrl } from './parse.js';
-import { go, scrollToDate } from './view.js';
+import { go, scrollToDate, shownCount } from './view.js';
 import { undoLast, redoLast } from './edit.js';
 import { startSelect } from './select.js';
 import { unpack } from './backup.js';
@@ -12,7 +12,7 @@ import { h, sheet, choose, closeSheet, toast, pasteWithLinks } from './ui.js';
 
 const undoable = (message, fn) => toast(message, tx(fn));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-const moved = lines => (lines.length === 1 ? 'Moved' : `Moved ${lines.length} lines`);
+const moved = lines => (shownCount(lines) === 1 ? 'Moved' : `Moved ${shownCount(lines)} lines`);
 
 // ---- Lines ----
 
@@ -21,7 +21,7 @@ export function toggleDone(line) {
   if (state.prefs.hideDone && !line.done) toast('Marked done', undo);
 }
 
-export const removeWithUndo = lines => undoable(lines.length > 1 ? `Deleted ${plural(lines.length, 'line')}` : 'Deleted line', () => {
+export const removeWithUndo = lines => undoable(shownCount(lines) > 1 ? `Deleted ${plural(shownCount(lines), 'line')}` : 'Deleted line', () => {
   removeLines(lines);
   new Set(lines.map(l => l.c)).forEach(c => tidy(c));
 });
@@ -29,7 +29,7 @@ export const removeWithUndo = lines => undoable(lines.length > 1 ? `Deleted ${pl
 // Marks lines done, or not done when they all are already, as one undoable step.
 export function setDone(lines) {
   const done = !lines.every(l => l.done);
-  undoable(`Marked ${plural(lines.length, 'line')} ${done ? 'done' : 'not done'}`, () => lines.forEach(l => update(state.lines, l.id, { done })));
+  undoable(`Marked ${plural(shownCount(lines), 'line')} ${done ? 'done' : 'not done'}`, () => lines.forEach(l => update(state.lines, l.id, { done })));
 }
 
 // The next day for a line: the day after its own (today, for a line on a past day), or tomorrow

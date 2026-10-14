@@ -6,7 +6,7 @@
 // turns into a move, but lets a touchmove listener take over the move from scrolling.
 import { state, tx, update, block, linesOf, moveBlock, tidy } from './store.js';
 import { clock, fitTime, withTime, hhmm } from './parse.js';
-import { main, ui } from './view.js';
+import { main, ui, counts } from './view.js';
 import { toggleDone, removeWithUndo, moveNext, nextAction } from './menus.js';
 import { pick, chosen, endSelect } from './select.js';
 import { h, toast } from './ui.js';
@@ -253,7 +253,8 @@ function startDrag() {
   g.ghost.classList.add('ghost');
   g.ghost.classList.remove('nowb');
   Object.assign(g.ghost.style, { width: `${r.width}px`, left: `${r.left}px` });
-  if (g.blk.length > 1) g.ghost.dataset.more = `+${g.blk.length - 1}`;
+  const more = g.blk.filter(x => x.id !== l.id && counts(x)).length;   // hidden done sub-items move too, uncounted
+  if (more) g.ghost.dataset.more = `+${more}`;
   g.bar = h('div', { className: 'dropbar' });
   document.body.append(g.ghost, g.bar);
   document.body.classList.add('dragging');
