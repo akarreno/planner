@@ -19,8 +19,8 @@
   --toast-fg: #f2f3f6;
   --toast-link: #a3b8ff;
   --shadow: 0 10px 30px rgb(22 27 45 / .16), 0 2px 6px rgb(22 27 45 / .08);
-  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
-  --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* Apple's system font (SF Pro), as in Notes; large sizes get its display cut automatically. */
+  --ui: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
   --bar: 52px;
   --find: #ffe17a;
   /* Motion (Emil Kowalski's curves): ease-out for things responding to a touch, drawer for sheets. */
@@ -45,13 +45,18 @@
 
 [hidden] { display: none !important; }
 /* Feel like an app, not a page: no tap flash, no page bounce, no double-tap zoom delay. */
-html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+html { font-size: 17px; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+/* iPhone and iPad (the only browsers with touch callouts): text follows Settings → Display & Brightness →
+   Text Size, as in Notes. Sizes below are in rem, relative to it; bars and buttons stay put. */
+@supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+  html { font: -apple-system-body; }
+}
 body {
   margin: 0;
   padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
   background: var(--bg);
   color: var(--fg);
-  font: 17px/1.4 var(--ui);
+  font: 1rem/1.4 var(--ui);
   touch-action: manipulation;
 }
 /* Buttons are controls: no text selection or callout on a long press, and they give way a little when pressed. */
@@ -71,7 +76,7 @@ body.sub { --top: var(--bar); }
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
 .bar-in { display: flex; align-items: center; gap: 2px; max-width: 696px; height: var(--bar); margin: 0 auto; }
-.bar h1 { flex: 1; min-width: 0; margin: 0; font: 700 22px/1 var(--round); letter-spacing: -.01em; }
+.bar h1 { flex: 1; min-width: 0; margin: 0; font: 700 1.3rem/1 var(--ui); letter-spacing: -.01em; }
 .ib {
   display: grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0;
   border: 0; border-radius: 10px; background: none; color: var(--accent); cursor: pointer;
@@ -135,44 +140,45 @@ main { display: flex; flex-direction: column; gap: 2px; max-width: 680px; margin
 }
 .dt .ic { width: 13px; height: 13px; flex: none; color: var(--faint); stroke-width: 2.6; transform: rotate(90deg); transition: transform 150ms var(--ease-out); }
 .day.folded .dt .ic { transform: none; }
-.dt h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 21px/1.2 var(--round); letter-spacing: -.01em; }
+.dt h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 1.24rem/1.2 var(--ui); letter-spacing: -.01em; }
 .chip {
   flex: none; padding: 3px 6px; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent);
-  font: 650 10px/1 var(--ui); letter-spacing: .06em; text-transform: uppercase;
+  font: 650 .6rem/1 var(--ui); letter-spacing: .06em; text-transform: uppercase;
 }
 .chip.past { background: var(--rule); color: var(--muted); }
-.cnt { color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.cnt { color: var(--faint); font-size: .76rem; font-variant-numeric: tabular-nums; }
 .chip:empty, .cnt:empty, .pill:empty { display: none; }
 .pill {
   flex: none; padding: 5px 10px; border: 1px solid var(--rule); border-radius: 999px;
-  background: var(--surface); font: 600 12px/1 var(--ui); cursor: pointer;
+  background: var(--surface); font: 600 .7rem/1 var(--ui); cursor: pointer;
 }
 .day.folded > :not(.dh) { display: none; }
 .day.today .dt h2 { color: var(--accent); }
 .end { min-height: 12px; cursor: text; }   /* tap below a day's last line to add one */
 .day.empty .end { min-height: 26px; }
-.day.empty .end::before { content: "Tap to add a line"; color: var(--faint); font-size: 15px; line-height: 26px; }
+.day.empty .end::before { content: "Tap to add a line"; color: var(--faint); font-size: .88rem; line-height: 26px; }
 .fl { margin-top: 6px; border-top: 1px dashed var(--rule); }
-.fl-h { padding: 10px 0 2px; color: var(--faint); font: 650 11px/1 var(--ui); letter-spacing: .08em; text-transform: uppercase; }
+.fl-h { padding: 10px 0 2px; color: var(--faint); font: 650 .65rem/1 var(--ui); letter-spacing: .08em; text-transform: uppercase; }
 p.empty { margin: 0; padding: 40px 8px; color: var(--muted); text-align: center; }
 .act.add-tpl { justify-content: center; color: var(--accent); }
 .welcome { display: flex; flex-direction: column; gap: 10px; max-width: 460px; margin: 12vh auto 0; }
-.welcome h2 { margin: 0; font: 700 24px/1.2 var(--round); text-wrap: balance; }
-.welcome p { margin: 0 0 8px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+.welcome h2 { margin: 0; font: 700 1.4rem/1.2 var(--ui); text-wrap: balance; }
+.welcome p { margin: 0 0 8px; color: var(--muted); font-size: .88rem; line-height: 1.5; }
 .welcome .act { justify-content: center; color: var(--accent); background: var(--surface); border: 1px solid var(--rule); }
 
 /* ---- Lines ---- */
 .ln {
   position: relative; display: flex; align-items: flex-start; gap: 6px;
-  min-height: 22px; margin-inline: -8px; padding: 3px 8px 3px calc(8px + var(--i, 0) * var(--step)); font-size: 16px;
+  margin-inline: -8px; padding: 1px 8px 1px calc(8px + var(--i, 0) * var(--step));
+  font-size: max(16px, .94rem);   /* lines are typed in: under 16px, iOS zooms in on focus */
   border-radius: 8px; cursor: text; touch-action: pan-y;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
-.tx { flex: 1; min-width: 0; min-height: 22px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+.tx { flex: 1; min-width: 0; min-height: 1.32em; line-height: 1.32; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
 .ln.ed { background-color: var(--accent-soft); -webkit-user-select: text; user-select: text; }
 .ln.bul::before {
-  content: ""; position: absolute; top: 13px; left: calc(8px + var(--i) * var(--step) - 14px);
+  content: ""; position: absolute; top: .66em; left: calc(8px + var(--i) * var(--step) - 14px);
   width: 7px; height: 1.6px; border-radius: 1px; background: var(--faint);
 }
 /* Headers ("Work:") and lines with sub-items read as headings, like Notes' collapsible sections. */
@@ -186,8 +192,8 @@ p.empty { margin: 0; padding: 40px 8px; color: var(--muted); text-align: center;
 .s-q { color: var(--muted); }
 .tx a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; word-break: break-all; }
 .fd {
-  display: flex; align-items: center; gap: 2px; flex: none; height: 24px; padding: 0 4px 0 6px;
-  border: 0; border-radius: 6px; background: none; color: var(--faint); font: 550 13px/1 var(--ui);
+  display: flex; align-items: center; gap: 2px; flex: none; height: 21px; padding: 0 4px 0 6px;
+  border: 0; border-radius: 6px; background: none; color: var(--faint); font: 550 .76rem/1 var(--ui);
   font-variant-numeric: tabular-nums; cursor: pointer;
 }
 .fd .ic { width: 14px; height: 14px; stroke-width: 2.4; transform: rotate(90deg); transition: transform 150ms var(--ease-out); }
@@ -221,7 +227,7 @@ body.selecting .ln { cursor: pointer; }
 .ls.nowend { position: relative; padding-bottom: 10px; background-position: 0 100%; }
 .ln.nowb::after, .ls.nowend::after {
   content: attr(data-now); position: absolute; right: 0; padding: 2px 6px; border-radius: 5px;
-  background: var(--now); color: var(--on-color); font: 650 11px/1.2 var(--ui); font-variant-numeric: tabular-nums;
+  background: var(--now); color: var(--on-color); font: 650 .65rem/1.2 var(--ui); font-variant-numeric: tabular-nums;
 }
 .ln.nowb::after { top: -9px; }
 .ls > .ln.nowb:first-child { margin-top: 10px; }   /* keep the time label clear of the day header */
@@ -235,7 +241,7 @@ body.selecting .ln { cursor: pointer; }
    coming in over its right end, which share the strip until a long swipe gives it all to Delete. */
 .sw {
   position: absolute; top: 0; bottom: 0; z-index: -1; display: flex; overflow: hidden;
-  color: var(--muted); font: 650 13px/1 var(--ui); white-space: nowrap; pointer-events: none;
+  color: var(--muted); font: 650 .76rem/1 var(--ui); white-space: nowrap; pointer-events: none;
 }
 .sw.r { left: 0; align-items: center; }
 .sw.r span { padding-left: 14px; }
@@ -333,22 +339,22 @@ body.selecting .toast { bottom: calc(108px + env(safe-area-inset-bottom, 0px)); 
   @starting-style { .sheet[open] { transform: scale(0.96); opacity: 0; } }
 }
 .sh-h { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 6px 18px; }
-.sh-h h3 { margin: 0; font: 650 19px/1.2 var(--round); }
+.sh-h h3 { margin: 0; font: 650 1.12rem/1.2 var(--ui); }
 .sh-h .ib { color: var(--muted); }
 .sh-b { display: flex; flex-direction: column; gap: 8px; overflow: auto; overscroll-behavior: contain; padding: 4px 16px calc(18px + env(safe-area-inset-bottom, 0px)); }
 .act {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 50px;
-  padding: 0 16px; border: 0; border-radius: 12px; background: var(--bg); font-size: 16px; text-align: left; cursor: pointer;
+  padding: 0 16px; border: 0; border-radius: 12px; background: var(--bg); font-size: .94rem; text-align: left; cursor: pointer;
 }
 .act.danger { color: var(--danger); }
 .act .ic { color: var(--accent); }
-.hint { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-.note { margin: 4px 2px; color: var(--muted); font-size: 13px; line-height: 1.45; }
-.field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 13px; }
+.hint { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.note { margin: 4px 2px; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: .76rem; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 input, select, textarea {
   min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px;
-  background: var(--bg); color: var(--fg); font: 16px var(--ui);
+  background: var(--bg); color: var(--fg); font: max(16px, .94rem) var(--ui);   /* under 16px, iOS zooms in on focus */
 }
 textarea { min-height: 38dvh; resize: vertical; line-height: 1.4; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
@@ -360,7 +366,7 @@ textarea { min-height: 38dvh; resize: vertical; line-height: 1.4; }
 .primary {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 50px; margin-top: 4px; border: 0; border-radius: 12px;
-  background: var(--accent); color: var(--on-color); font-size: 16px; font-weight: 650; cursor: pointer;
+  background: var(--accent); color: var(--on-color); font-size: .94rem; font-weight: 650; cursor: pointer;
 }
 .primary .hint { color: inherit; opacity: .75; font-weight: 500; }
 .primary:disabled { opacity: .45; cursor: default; }

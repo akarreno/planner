@@ -8,6 +8,9 @@ It installs to the Home Screen from Safari, works offline, and syncs through Fir
 
 Search (the magnifier button, or ⌘F) finds words across the week, Later and the Archive, ignoring case and
 accents; tap a result to jump to it. Blank lines are kept tidy: at most one in a row, none at the end of a day.
+Done lines are hidden in the planner (menu → Show done lines) and listed in the Archive right away, under
+their day; archived days show there in full. Text uses Apple's system font and, on iPhone and iPad, follows
+Settings → Display & Brightness → Text Size.
 
 Moving lines: swipe left for Tomorrow and Delete (a long swipe deletes at once); Move to… offers the next day
 first; long-press and let go to select several lines (or ⌘-click, Shift-click), then move, mark done, delete,

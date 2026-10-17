@@ -8,6 +8,8 @@ export const main = document.getElementById('main');
 // finding: the planner's search bar is open; query: what's typed there (or in the archive's search);
 // editing: id of the line being typed in; sel: ids of the selected lines in select mode, else null.
 export const ui = { screen: 'plan', query: '', finding: false, editing: null, sel: null };
+// Archive sections of done lines from days still in the planner that are folded (on this device only).
+export const archFold = new Set();
 const $ = id => document.getElementById(id);
 const TITLES = { tpl: 'Templates', arch: 'Archive' };
 const sections = new Map();   // key → <section>
@@ -41,7 +43,7 @@ export function search(query) {
   if (q.value !== query) q.value = query;
   bar.hidden = !(ui.screen === 'arch' || ui.finding);
   document.body.classList.toggle('finding', ui.finding);
-  q.placeholder = ui.screen === 'arch' ? 'Search archived days' : 'Search planner';
+  q.placeholder = ui.screen === 'arch' ? 'Search the archive' : 'Search planner';
   $('q-done').hidden = ui.screen !== 'plan';
   render();
 }
@@ -72,7 +74,7 @@ export function render() {
     if (!n) want.push(extra('empty', 'p', 'No line has that text.'));
   } else setText($('q-count'), '');
   if (ui.screen === 'plan' && !fresh && !finding && want.length === 1) want.unshift(extra('empty', 'p', 'No days planned. Open the menu and use Fill days to add the coming week from your templates.'));
-  if (ui.screen === 'arch' && !want.length) want.push(extra('empty', 'p', ui.query ? 'No archived day has that text.' : 'Archived days show up here.'));
+  if (ui.screen === 'arch' && !want.length) want.push(extra('empty', 'p', ui.query ? 'Nothing in the archive has that text.' : 'Lines you mark done and days you archive show up here.'));
   if (ui.screen === 'tpl') want.push(extras.newTpl ??= h('button', { className: 'act add-tpl', 'data-act': 'new-tpl' }, 'New template'));
   const keep = new Set(want);
   for (const [k, el] of sections) if (!keep.has(el)) sections.delete(k);
@@ -141,19 +143,21 @@ export const counts = l => (!!l.text.trim() || l.id === ui.editing) && !hidden(l
 // How many lines the screen shows among these (at least 1): hidden done sub-items go along uncounted.
 export const shownCount = lines => Math.max(1, lines.filter(counts).length);
 
-// Visible lines of a container: skips lines inside folded parents and, if chosen, done lines.
+// Visible lines of a container: skips lines inside folded parents and, if chosen, done lines (all: keep
+// done lines anyway, as the Archive does).
 // kids: how many lines inside a line would show when it's open (so done ones don't count while hidden).
 // Folding hides only when something inside would show; otherwise there'd be no way to open it.
-function outline(list) {
+function outline(list, all = false) {
+  const gone = l => !all && hidden(l), shows = l => (!!l.text.trim() || l.id === ui.editing) && !gone(l);
   const out = [];
   let hideBelow = -1;
   for (let i = 0; i < list.length; i++) {
     const l = list[i];
     if (hideBelow >= 0) { if (l.ind > hideBelow) continue; hideBelow = -1; }
     let end = i + 1, kids = 0;
-    for (; end < list.length && list[end].ind > l.ind; end++) if (counts(list[end])) kids++;
+    for (; end < list.length && list[end].ind > l.ind; end++) if (shows(list[end])) kids++;
     if (l.fold && kids) hideBelow = l.ind;
-    if (!hidden(l)) out.push({ l, kids });
+    if (!gone(l)) out.push({ l, kids });
   }
   // Hidden lines can leave blank lines that separate nothing: show at most one in a row, none at the
   // ends, and none at the start or end of a list of sub-items.
@@ -216,13 +220,35 @@ const tplSections = () => templates().map(tp =>
 
 const hit = l => findAll(visibleText(l.text), ui.query).length > 0;
 
+// The Archive, newest day first: archived days in full (done lines too, struck through), and the lines
+// marked done on days still in the planner and in Later, which show here as soon as they're done.
 function archiveSections() {
-  const q = ui.query.trim();
-  return archivedDays().flatMap(d => {
-    const lines = linesOf(d.id);
-    if (q && !lines.some(hit)) return [];
-    return [{ key: d.id, kind: 'arch', title: headTitle(d.date), fold: !q && d.fold, ro: true, pill: ['Restore', 'restore'], entries: outline(lines), count: countOf(d.id) }];
-  });
+  const q = ui.query.trim(), t = today();
+  const days = [...archivedDays(), ...activeDays()].sort((a, b) => b.date.localeCompare(a.date));
+  const texted = lines => lines.filter(l => l.text.trim()).length;
+  const section = (d, lines) => {
+    if (!lines.length || (q && !lines.some(hit))) return [];
+    if (d.arch) return [{ key: d.id, kind: 'arch', title: headTitle(d.date), fold: !q && d.fold, ro: true, pill: ['Restore', 'restore'], entries: outline(lines, true), count: texted(lines) }];
+    const key = `done-${d.id}`;
+    return [{ key, kind: 'done', title: d.title ?? headTitle(d.date), chip: d.date === t ? 'Today' : d.date ? 'In planner' : '', fold: !q && archFold.has(key), ro: true, entries: doneOnly(linesOf(d.id)), count: texted(lines) }];
+  };
+  return [
+    ...days.flatMap(d => section(d, d.arch ? linesOf(d.id) : linesOf(d.id).filter(l => l.done))),
+    ...section({ id: LATER, title: 'Later' }, linesOf(LATER).filter(l => l.done)),
+  ];
+}
+
+// The done lines of a day or Later: a done line sits under the nearest done line it belongs to, or at
+// the left edge when none of the lines it belongs to is done.
+function doneOnly(list) {
+  const above = [], out = [];   // above: the lines this one sits inside, as { ind, done, at (shown indent) }
+  for (const l of list) {
+    while (above.length && above.at(-1).ind >= l.ind) above.pop();
+    const up = above.findLast(x => x.done), ind = up ? up.at + 1 : 0;
+    above.push({ ind: l.ind, done: l.done, at: ind });
+    if (l.done) out.push({ l: ind === l.ind ? l : { ...l, ind }, kids: 0 });
+  }
+  return out;
 }
 
 // Planner search: only the matching lines, under their day (or Later), then archived days. Done lines
@@ -267,7 +293,8 @@ function paintSection(s) {
   cl.toggle('ro', !!s.ro);
   cl.toggle('today', s.chip === 'Today');
   cl.toggle('empty', !s.entries.length);
-  const [head, ls, fl, end] = el.children, [dt, pill] = head.children, [, title, chip, cnt] = dt.children;
+  const [head, ls, fl, end] = el.children, [dt, pill, menu] = head.children, [, title, chip, cnt] = dt.children;
+  menu.hidden = s.kind === 'done';   // done lines from a planner day: that day's menu belongs to the planner
   setText(title, s.title);
   setText(chip, s.chip ?? '');
   chip.classList.toggle('past', s.chip === 'Past');

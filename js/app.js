@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { startSync } from './sync.js';
 import { backupIfDue } from './backup.js';
 import { today } from './parse.js';
-import { main, ui, render, go, search, setFinding, scrollToNow, scrollToDate } from './view.js';
+import { main, ui, archFold, render, go, search, setFinding, scrollToNow, scrollToDate } from './view.js';
 import { editAt, appendLine, undoLast, redoLast } from './edit.js';
 import { consumeClick } from './gestures.js';
 import { tap } from './select.js';
@@ -79,6 +79,10 @@ function foldAll() {
   const fold = $('fold').dataset.mode === 'collapse';
   const [map, recs] = ui.screen === 'tpl' ? [state.tpls, store.templates()] : [state.days, ui.screen === 'plan' ? store.activeDays() : store.archivedDays()];
   store.tx(() => { for (const r of recs) if (r.fold !== fold) update(map, r.id, { fold }); });
+  if (ui.screen === 'arch') {   // the Archive's sections of done lines from planner days fold here only
+    for (const sec of main.querySelectorAll('section.day[data-kind="done"]')) archFold[fold ? 'add' : 'delete'](sec.dataset.c);
+    render();
+  }
   if (ui.screen !== 'plan') return;
   setPref('laterFold', fold);
   requestAnimationFrame(() => (fold ? scrollToDate(today()) : scrollToNow()));
@@ -87,6 +91,7 @@ function foldAll() {
 function toggleSection(kind, c) {
   if (kind === 'later') setPref('laterFold', !state.prefs.laterFold);
   else if (kind === 'tpl') update(state.tpls, c, { fold: !state.tpls.get(c).fold });
+  else if (kind === 'done') { archFold[archFold.has(c) ? 'delete' : 'add'](c); render(); }
   else update(state.days, c, { fold: !state.days.get(c).fold });
 }
 
